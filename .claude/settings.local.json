@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":5000 :3000 :3001\")",
+      "Bash(findstr LISTENING)",
+      "Bash(cmd /c \"taskkill /PID 11448 /F & taskkill /PID 17904 /F & taskkill /PID 1892 /F\")",
+      "Bash(cmd /c \"taskkill /PID 11448 /F\")",
+      "Bash(cmd /c \"taskkill /F /PID 11448\")",
+      "Bash(cmd /c \"taskkill /F /PID 17904\")",
+      "Bash(cmd /c \"taskkill /F /PID 1892\")",
+      "Bash(cmd /c \"netstat -ano | findstr :5000\")",
+      "Bash(cmd /c \"netstat -ano | findstr LISTENING\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Where-Object {$_LocalPort -in @\\(3000,3001,5000\\)} | Select-Object LocalPort,OwningProcess\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Select-Object LocalPort,OwningProcess | Where-Object LocalPort -in 3000,3001,5000\")",
+      "Bash(powershell -Command \"Stop-Process -Id 11448,17724,17904 -Force\")",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

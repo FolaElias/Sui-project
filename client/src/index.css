@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-brand-bg text-brand-text font-sans;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(153,69,255,0.18), transparent),
+      radial-gradient(ellipse 40% 40% at 90% 80%, rgba(0,240,255,0.08), transparent);
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar        { @apply w-1; }
+  ::-webkit-scrollbar-track  { background: #0A0A0F; }
+  ::-webkit-scrollbar-thumb  { background: rgba(153,69,255,0.4); border-radius: 999px; }
+
+  * { @apply box-border; }
+}
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply relative rounded-2xl border border-brand-border bg-brand-glass p-5 shadow-card overflow-hidden;
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    backdrop-filter: blur(12px);
+  }
+  .card::before {
+    content: '';
+    @apply absolute inset-0 rounded-2xl pointer-events-none;
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 60%);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply relative px-6 py-2.5 rounded-xl font-semibold text-sm text-white transition-all duration-200;
+    @apply disabled:opacity-40 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #9945FF, #6B00FF);
+    box-shadow: 0 0 20px rgba(153,69,255,0.35);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 30px rgba(153,69,255,0.6), 0 0 60px rgba(153,69,255,0.2);
+    transform: translateY(-1px);
+  }
+
+  .btn-cyan {
+    @apply relative px-6 py-2.5 rounded-xl font-semibold text-sm text-brand-bg transition-all duration-200;
+    background: linear-gradient(135deg, #00F0FF, #0088FF);
+    box-shadow: 0 0 20px rgba(0,240,255,0.35);
+  }
+  .btn-cyan:hover {
+    box-shadow: 0 0 30px rgba(0,240,255,0.6);
+    transform: translateY(-1px);
+  }
+
+  .btn-ghost {
+    @apply px-6 py-2.5 rounded-xl font-semibold text-sm text-brand-text border border-brand-border transition-all duration-200;
+    backdrop-filter: blur(8px);
+  }
+  .btn-ghost:hover {
+    @apply border-brand-purple;
+    box-shadow: 0 0 15px rgba(153,69,255,0.2);
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full rounded-xl px-4 py-3 text-sm text-brand-text border border-brand-border;
+    @apply placeholder-brand-muted focus:outline-none transition-all duration-200;
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(8px);
+  }
+  .input:focus {
+    border-color: rgba(153,69,255,0.6);
+    box-shadow: 0 0 0 3px rgba(153,69,255,0.1);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #9945FF, #00F0FF);
+  }
+  .gradient-text-pink {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #FF2EF7, #9945FF);
+  }
+  .gradient-text-green {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #14F195, #00F0FF);
+  }
+
+  /* Neon badge */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border;
+  }
+  .badge-purple {
+    @apply badge text-brand-purple border-brand-purple/30 bg-brand-purple/10;
+  }
+  .badge-cyan {
+    @apply badge text-brand-cyan border-brand-cyan/30 bg-brand-cyan/10;
+  }
+  .badge-green {
+    @apply badge text-brand-green border-brand-green/30 bg-brand-green/10;
+  }
+  .badge-pink {
+    @apply badge text-brand-pink border-brand-pink/30 bg-brand-pink/10;
+  }
+
+  /* Glow orb background decoration */
+  .orb {
+    @apply absolute rounded-full blur-3xl pointer-events-none opacity-20;
+  }
+}
+
+@layer utilities {
+  .text-shimmer {
+    background: linear-gradient(90deg, #9945FF 0%, #00F0FF 25%, #FF2EF7 50%, #14F195 75%, #9945FF 100%);
+    background-size: 200% auto;
+    @apply bg-clip-text text-transparent animate-shimmer;
+  }
+}
