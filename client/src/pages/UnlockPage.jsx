@@ -66,7 +66,7 @@ export default function UnlockPage() {
           <p className="text-brand-muted text-sm">Welcome back. Enter your password to unlock.</p>
         </div>
 
-        <div className="card p-8 space-y-5">
+        <div className="card p-5 sm:p-8 space-y-5">
 
           {/* Email — pre-filled but editable */}
           <div>

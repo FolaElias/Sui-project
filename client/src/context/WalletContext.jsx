@@ -85,9 +85,13 @@ export function WalletProvider({ children }) {
   const fetchBalance = useCallback(async (addr) => {
     const target = addr || address
     if (!target) return
-    const res = await suiClient.getBalance({ owner: target })
-    setBalance(res.totalBalance)
-    return res.totalBalance
+    try {
+      const res = await suiClient.getBalance({ owner: target })
+      setBalance(res.totalBalance)
+      return res.totalBalance
+    } catch {
+      // Testnet may be temporarily unavailable — keep existing balance
+    }
   }, [address])
 
   // Fetch all owned objects (coins + NFTs)
@@ -95,13 +99,18 @@ export function WalletProvider({ children }) {
     const target = addr || address
     if (!target) return
     setLoading(true)
-    const res = await suiClient.getOwnedObjects({
-      owner: target,
-      options: { showContent: true, showDisplay: true, showType: true }
-    })
-    setObjects(res.data)
-    setLoading(false)
-    return res.data
+    try {
+      const res = await suiClient.getOwnedObjects({
+        owner: target,
+        options: { showContent: true, showDisplay: true, showType: true }
+      })
+      setObjects(res.data)
+      return res.data
+    } catch {
+      // Keep existing objects on error
+    } finally {
+      setLoading(false)
+    }
   }, [address])
 
   const hasWallet = !!localStorage.getItem('sui_keystore')

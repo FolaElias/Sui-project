@@ -14,7 +14,7 @@ export default function LandingPage() {
   const { hasWallet } = useWallet()
 
   return (
-    <div className="h-screen flex overflow-hidden relative bg-brand-bg">
+    <div className="min-h-screen flex flex-col md:flex-row overflow-hidden relative bg-brand-bg">
 
       {/* ── Animated background ─────────────────────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -56,7 +56,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── Left: Hero content ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col justify-center px-16 relative z-10">
+      <div className="flex-1 flex flex-col justify-center px-6 sm:px-10 md:px-16 py-12 md:py-0 relative z-10">
         <motion.div
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
@@ -75,7 +75,7 @@ export default function LandingPage() {
 
           {/* Headline */}
           <h1 className="font-display font-extrabold leading-none mb-6"
-            style={{ fontSize: 'clamp(3rem, 6vw, 5.5rem)' }}>
+            style={{ fontSize: 'clamp(2.5rem, 8vw, 5.5rem)' }}>
             <motion.span
               className="block text-white"
               initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.5 }}
@@ -135,7 +135,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── Right: Feature cards ─────────────────────────────────────────── */}
-      <div className="w-96 flex flex-col justify-center gap-4 px-8 relative z-10">
+      <div className="w-full md:w-96 flex flex-col justify-center gap-4 px-6 sm:px-8 md:px-8 pb-12 md:py-0 relative z-10">
 
         {/* Big logo card */}
         <motion.div

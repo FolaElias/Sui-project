@@ -98,7 +98,7 @@ export default function CreateWalletPage() {
 
       setStep(2)
     } catch (err) {
-      console.error('createWallet error:', err)
+      console.warn('[createWallet]', err?.message)
       toast.error('Failed to generate wallet: ' + (err?.message || 'Unknown error'))
     } finally {
       setLoading(false)
@@ -181,7 +181,7 @@ export default function CreateWalletPage() {
 
         {/* ── STEP 0: Account ─────────────────────────────────────────────── */}
         {step === 0 && (
-          <div className="card p-8 space-y-6">
+          <div className="card p-5 sm:p-8 space-y-6">
             <div>
               <span className="badge-purple mb-3 inline-flex">Step 1 · Account</span>
               <h2 className="text-2xl font-display font-bold text-white mb-1">Create your account</h2>
@@ -225,7 +225,7 @@ export default function CreateWalletPage() {
 
         {/* ── STEP 1: Password ────────────────────────────────────────────── */}
         {step === 1 && (
-          <div className="card p-8 space-y-6">
+          <div className="card p-5 sm:p-8 space-y-6">
             <div>
               <span className="badge-cyan mb-3 inline-flex">Step 2 · Security</span>
               <h2 className="text-2xl font-display font-bold text-white mb-1">Set your password</h2>
@@ -286,7 +286,7 @@ export default function CreateWalletPage() {
 
         {/* ── STEP 2: Backup mnemonic ──────────────────────────────────────── */}
         {step === 2 && (
-          <div className="card p-8 space-y-6">
+          <div className="card p-5 sm:p-8 space-y-6">
             <div>
               <span className="badge-pink mb-3 inline-flex">Step 3 · Backup</span>
               <h2 className="text-2xl font-display font-bold text-white mb-1">Your secret phrase</h2>
@@ -331,7 +331,7 @@ export default function CreateWalletPage() {
 
         {/* ── STEP 3: Verify quiz ──────────────────────────────────────────── */}
         {step === 3 && (
-          <div className="card p-8 space-y-6">
+          <div className="card p-5 sm:p-8 space-y-6">
             <div>
               <span className="badge-green mb-3 inline-flex">Step 4 · Verify</span>
               <h2 className="text-2xl font-display font-bold text-white mb-1">Confirm your backup</h2>
@@ -381,7 +381,7 @@ export default function CreateWalletPage() {
 
         {/* ── STEP 4: Done ────────────────────────────────────────────────── */}
         {step === 4 && (
-          <div className="card p-8 text-center space-y-6">
+          <div className="card p-5 sm:p-8 text-center space-y-6">
             <div className="flex justify-center">
               <div className="w-24 h-24 rounded-full flex items-center justify-center text-5xl animate-float"
                 style={{

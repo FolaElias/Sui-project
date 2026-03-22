@@ -15,7 +15,10 @@
       "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Where-Object {$_LocalPort -in @\\(3000,3001,5000\\)} | Select-Object LocalPort,OwningProcess\")",
       "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Select-Object LocalPort,OwningProcess | Where-Object LocalPort -in 3000,3001,5000\")",
       "Bash(powershell -Command \"Stop-Process -Id 11448,17724,17904 -Force\")",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "Bash(sed -i \"s/console\\\\.error\\(''createWallet error:'', err\\)/console.warn\\(''[createWallet]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/CreateWalletPage.jsx\")",
+      "Bash(sed -i \"s/console\\\\.error\\(''importWallet error:'', err\\)/console.warn\\(''[importWallet]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/ImportWalletPage.jsx\")",
+      "Bash(sed -i \"s/console\\\\.error\\(err\\)/console.warn\\(''[send]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/SendPage.jsx\")"
     ]
   }
 }

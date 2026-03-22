@@ -154,7 +154,7 @@ export default function ImportWalletPage() {
       await linkAddress(address).catch(() => {})
       setStep(3)
     } catch (err) {
-      console.error('importWallet error:', err)
+      console.warn('[importWallet]', err?.message)
       toast.error('Failed to import wallet: ' + (err?.message || 'Unknown error'))
     } finally {
       setLoading(false)
@@ -221,7 +221,7 @@ export default function ImportWalletPage() {
           {step === 0 && (
             <motion.div key="step0"
               variants={itemVariant} initial="hidden" animate="show" exit={{ opacity: 0, y: -20 }}
-              className="card p-8 space-y-6"
+              className="card p-5 sm:p-8 space-y-6"
             >
               <div>
                 <span className="badge-cyan mb-3 inline-flex">Step 1 · Secret Phrase</span>
@@ -305,7 +305,7 @@ export default function ImportWalletPage() {
           {step === 1 && (
             <motion.div key="step1"
               variants={itemVariant} initial="hidden" animate="show" exit={{ opacity: 0, y: -20 }}
-              className="card p-8 space-y-6"
+              className="card p-5 sm:p-8 space-y-6"
             >
               <div>
                 <span className="badge-purple mb-3 inline-flex">Step 2 · Account</span>
@@ -376,7 +376,7 @@ export default function ImportWalletPage() {
           {step === 2 && (
             <motion.div key="step2"
               variants={itemVariant} initial="hidden" animate="show" exit={{ opacity: 0, y: -20 }}
-              className="card p-8 space-y-6"
+              className="card p-5 sm:p-8 space-y-6"
             >
               <div>
                 <span className="badge-pink mb-3 inline-flex">Step 3 · Password</span>
@@ -443,7 +443,7 @@ export default function ImportWalletPage() {
           {step === 3 && (
             <motion.div key="step3"
               variants={itemVariant} initial="hidden" animate="show"
-              className="card p-8 text-center space-y-6"
+              className="card p-5 sm:p-8 text-center space-y-6"
             >
               {/* Success animation */}
               <div className="flex justify-center">

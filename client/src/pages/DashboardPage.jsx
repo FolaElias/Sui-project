@@ -48,8 +48,10 @@ export default function DashboardPage() {
   const { address, balance, fetchBalance, fetchObjects, objects, loading } = useWallet()
 
   useEffect(() => {
-    if (address) { fetchBalance(); fetchObjects() }
-  }, [address])
+    if (!address) return
+    fetchBalance().catch(() => {})
+    fetchObjects().catch(() => {})
+  }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const suiBalance = (Number(balance) / 1_000_000_000).toFixed(4)
 
@@ -85,7 +87,7 @@ export default function DashboardPage() {
               maskComposite: 'exclude',
             }} />
 
-          <div className="relative z-10 p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="relative z-10 p-5 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="badge-green text-xs">● Live · Testnet</span>
@@ -128,26 +130,26 @@ export default function DashboardPage() {
         {/* ── Quick Actions ──────────────────────────────────────────────── */}
         <motion.div variants={item}>
           <p className="text-brand-muted text-xs font-semibold uppercase tracking-widest mb-4">Quick Actions</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
             {quickActions.map(({ href, icon, label, desc, color, bg, border }, i) => (
               <motion.a
                 key={href} href={href}
                 whileHover={{ y: -6, scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                className="relative rounded-2xl p-4 text-center cursor-pointer overflow-hidden group"
+                className="relative rounded-2xl p-3 sm:p-4 text-center cursor-pointer overflow-hidden group"
                 style={{ background: bg, border: `1px solid ${border}` }}
               >
                 {/* Hover glow sweep */}
                 <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                   style={{ background: `radial-gradient(circle at 50% 0%, ${color}20, transparent 70%)` }} />
 
-                <div className="text-3xl mb-2.5 relative z-10 transition-all duration-300 group-hover:scale-110"
+                <div className="text-2xl sm:text-3xl mb-1.5 sm:mb-2.5 relative z-10 transition-all duration-300 group-hover:scale-110"
                   style={{ color, filter: `drop-shadow(0 0 8px ${color})` }}>
                   {icon}
                 </div>
-                <p className="text-white text-sm font-semibold relative z-10">{label}</p>
-                <p className="text-brand-muted text-xs mt-0.5 relative z-10">{desc}</p>
+                <p className="text-white text-xs sm:text-sm font-semibold relative z-10 leading-tight">{label}</p>
+                <p className="text-brand-muted text-xs mt-0.5 relative z-10 hidden sm:block">{desc}</p>
 
                 {/* Bottom neon line */}
                 <div className="absolute bottom-0 left-0 right-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-300"
@@ -158,7 +160,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* ── Stats row ─────────────────────────────────────────────────── */}
-        <motion.div variants={item} className="grid grid-cols-3 gap-3">
+        <motion.div variants={item} className="grid grid-cols-3 gap-2 sm:gap-3">
           {[
             { label: 'Network', value: 'Sui Testnet', color: '#00F0FF', icon: '🌐' },
             { label: 'Assets',  value: `${objects.length} items`,  color: '#9945FF', icon: '◈' },
@@ -191,7 +193,7 @@ export default function DashboardPage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {[...Array(4)].map((_, i) => (
                 <div key={i} className="card h-32 animate-pulse"
                   style={{ background: 'rgba(255,255,255,0.03)' }} />
@@ -231,7 +233,7 @@ export default function DashboardPage() {
             </motion.div>
           ) : (
             <motion.div variants={container} initial="hidden" animate="show"
-              className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {objects.slice(0, 8).map((obj, i) => (
                 <motion.div key={obj.data?.objectId} variants={item}
                   whileHover={{ y: -4, scale: 1.02 }}

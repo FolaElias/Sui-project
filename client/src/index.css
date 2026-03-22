@@ -111,6 +111,11 @@
     animation: shimmer 3s linear infinite;
   }
   .scrollable { @apply overflow-y-auto; }
+  /* Hide scrollbar on mobile */
+  @media (max-width: 768px) {
+    .scrollable::-webkit-scrollbar { display: none; }
+    .scrollable { -ms-overflow-style: none; scrollbar-width: none; }
+  }
 }
 
 /* Keyframes */
