@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWallet } from '../../context/WalletContext'
 import { useAuth } from '../../context/AuthContext'
+import SuiLogo from './SuiLogo'
 
 const navItems = [
   { to: '/dashboard',   label: 'Dashboard',  icon: '⊡', color: '#9945FF' },
@@ -172,12 +173,12 @@ export default function Layout({ children }) {
           initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         >
           <div className="relative">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-black text-white"
-              style={{ background: 'linear-gradient(135deg, #9945FF, #00F0FF)', boxShadow: '0 0 20px rgba(153,69,255,0.6)' }}>
-              ◈
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden"
+              style={{ boxShadow: '0 0 20px rgba(76,163,255,0.5)' }}>
+              <SuiLogo size={36} />
             </div>
             <div className="absolute inset-0 rounded-xl pulse-ring"
-              style={{ border: '1px solid rgba(153,69,255,0.4)' }} />
+              style={{ border: '1px solid rgba(76,163,255,0.4)' }} />
           </div>
           <span className="text-xl font-display font-extrabold text-white tracking-tight">
             Sui<span className="gradient-text">Vault</span>
@@ -279,9 +280,9 @@ export default function Layout({ children }) {
         >
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black text-white"
-              style={{ background: 'linear-gradient(135deg, #9945FF, #00F0FF)', boxShadow: '0 0 12px rgba(153,69,255,0.5)' }}>
-              ◈
+            <div className="w-7 h-7 rounded-lg overflow-hidden"
+              style={{ boxShadow: '0 0 12px rgba(76,163,255,0.5)' }}>
+              <SuiLogo size={28} />
             </div>
             <span className="text-base font-display font-extrabold text-white tracking-tight">
               Sui<span className="gradient-text">Vault</span>

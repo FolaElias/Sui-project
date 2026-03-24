@@ -13,12 +13,17 @@ api.interceptors.request.use(cfg => {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [isUnlocked, setIsUnlocked] = useState(false)
+  // Persist unlock state across refreshes via sessionStorage
+  // (sessionStorage survives refresh but clears when the tab is closed)
+  const [isUnlocked, setIsUnlocked] = useState(
+    () => sessionStorage.getItem('sui_unlocked') === 'true' && !!localStorage.getItem('token')
+  )
 
   const register = async (username, email, password) => {
     const { data } = await api.post('/api/auth/register', { username, email, password })
     localStorage.setItem('token', data.token)
-    localStorage.setItem('sui_email', email)   // remember email for unlock screen
+    localStorage.setItem('sui_email', email)
+    sessionStorage.setItem('sui_unlocked', 'true')
     setUser(data.user)
     setIsUnlocked(true)
     return data
@@ -28,6 +33,7 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/api/auth/login', { email, password })
     localStorage.setItem('token', data.token)
     localStorage.setItem('sui_email', email)
+    sessionStorage.setItem('sui_unlocked', 'true')
     setUser(data.user)
     setIsUnlocked(true)
     return data
@@ -42,12 +48,21 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('token')
+    sessionStorage.removeItem('sui_unlocked')
+    sessionStorage.removeItem('sui_session_pw')
     setUser(null)
     setIsUnlocked(false)
   }
 
-  const unlock = () => setIsUnlocked(true)
-  const lock   = () => setIsUnlocked(false)
+  const unlock = () => {
+    sessionStorage.setItem('sui_unlocked', 'true')
+    setIsUnlocked(true)
+  }
+  const lock = () => {
+    sessionStorage.removeItem('sui_unlocked')
+    sessionStorage.removeItem('sui_session_pw')
+    setIsUnlocked(false)
+  }
 
   const savedEmail = localStorage.getItem('sui_email') || ''
 

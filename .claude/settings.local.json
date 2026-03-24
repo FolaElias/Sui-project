@@ -1,24 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install:*)",
-      "Bash(netstat -ano)",
-      "Bash(findstr \":5000 :3000 :3001\")",
-      "Bash(findstr LISTENING)",
-      "Bash(cmd /c \"taskkill /PID 11448 /F & taskkill /PID 17904 /F & taskkill /PID 1892 /F\")",
-      "Bash(cmd /c \"taskkill /PID 11448 /F\")",
-      "Bash(cmd /c \"taskkill /F /PID 11448\")",
-      "Bash(cmd /c \"taskkill /F /PID 17904\")",
-      "Bash(cmd /c \"taskkill /F /PID 1892\")",
-      "Bash(cmd /c \"netstat -ano | findstr :5000\")",
-      "Bash(cmd /c \"netstat -ano | findstr LISTENING\")",
-      "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Where-Object {$_LocalPort -in @\\(3000,3001,5000\\)} | Select-Object LocalPort,OwningProcess\")",
-      "Bash(powershell -Command \"Get-NetTCPConnection -State Listen | Select-Object LocalPort,OwningProcess | Where-Object LocalPort -in 3000,3001,5000\")",
-      "Bash(powershell -Command \"Stop-Process -Id 11448,17724,17904 -Force\")",
-      "Bash(node -e \":*)",
-      "Bash(sed -i \"s/console\\\\.error\\(''createWallet error:'', err\\)/console.warn\\(''[createWallet]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/CreateWalletPage.jsx\")",
-      "Bash(sed -i \"s/console\\\\.error\\(''importWallet error:'', err\\)/console.warn\\(''[importWallet]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/ImportWalletPage.jsx\")",
-      "Bash(sed -i \"s/console\\\\.error\\(err\\)/console.warn\\(''[send]'', err?.message\\)/\" \"c:/Users/Admin/Documents/React-Projects/Sui Web3/client/src/pages/SendPage.jsx\")"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:sui.io)",
+      "Bash(find 'c:\\\\Users\\\\Admin\\\\Documents\\\\React-Projects\\\\Sui Web3\\\\client\\\\node_modules' -name *.svg)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

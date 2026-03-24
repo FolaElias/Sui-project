@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useWallet } from '../context/WalletContext'
+import SuiLogo from '../components/shared/SuiLogo'
 
 const features = [
   { icon: '🔐', label: 'Non-custodial', desc: 'Your keys, always', color: '#9945FF' },
@@ -158,8 +159,13 @@ export default function LandingPage() {
             <motion.div
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-              className="text-6xl mb-3"
-            >◈</motion.div>
+              className="mb-3 flex justify-center"
+            >
+              <div className="w-16 h-16 rounded-2xl overflow-hidden"
+                style={{ boxShadow: '0 0 32px rgba(76,163,255,0.5)' }}>
+                <SuiLogo size={64} />
+              </div>
+            </motion.div>
             <h2 className="font-display font-extrabold text-2xl text-white mb-0.5">
               Sui<span className="gradient-text">Vault</span>
             </h2>

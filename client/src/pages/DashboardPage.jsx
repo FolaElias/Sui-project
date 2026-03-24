@@ -46,6 +46,7 @@ const item = {
 
 export default function DashboardPage() {
   const { address, balance, fetchBalance, fetchObjects, objects, loading } = useWallet()
+  const [suiPrice, setSuiPrice] = useState(null)
 
   useEffect(() => {
     if (!address) return
@@ -53,7 +54,15 @@ export default function DashboardPage() {
     fetchObjects().catch(() => {})
   }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=sui&vs_currencies=usd')
+      .then(r => r.json())
+      .then(d => setSuiPrice(d?.sui?.usd ?? null))
+      .catch(() => {})
+  }, [])
+
   const suiBalance = (Number(balance) / 1_000_000_000).toFixed(4)
+  const usdValue = suiPrice != null ? (parseFloat(suiBalance) * suiPrice).toFixed(2) : null
 
   return (
     <Layout>
@@ -111,7 +120,9 @@ export default function DashboardPage() {
                 <span className="text-3xl font-bold gradient-text mb-1">SUI</span>
               </div>
 
-              <p className="text-brand-muted text-sm mt-2">≈ $0.00 USD</p>
+              <p className="text-brand-muted text-sm mt-2">
+                {usdValue != null ? `≈ $${usdValue} USD` : '≈ — USD'}
+              </p>
             </div>
 
             {/* Rotating Sui logo decoration */}

@@ -23,14 +23,14 @@ function TxRow({ tx, address }) {
   const [open, setOpen] = useState(false)
 
   // Determine tx direction and type
-  const effects   = tx?.effects
-  const timestamp = tx?.timestampMs
-  const digest    = tx?.digest
-  const status    = effects?.status?.status
+  const effects    = tx?.effects
+  const timestamp  = tx?.timestampMs
+  const digest     = tx?.digest
+  const status     = effects?.status?.status
 
-  // Figure out what happened: look at balance changes
-  const balChanges = effects?.balanceChanges || []
-  const myChange = balChanges.find(c =>
+  // balanceChanges is a TOP-LEVEL field on the tx, not inside effects
+  const balChanges = tx?.balanceChanges || []
+  const myChange   = balChanges.find(c =>
     c.owner?.AddressOwner?.toLowerCase() === address?.toLowerCase()
   )
 
@@ -202,16 +202,38 @@ export default function HistoryPage() {
     try {
       const cur = reset ? null : (cursorOverride !== undefined ? cursorOverride : cursor)
       const res = await testnetClient.queryTransactionBlocks({
-        filter:  { FromOrToAddress: { addr: address } },
+        filter:  { ToAddress: address },
         options: { showEffects: true, showBalanceChanges: true, showInput: true },
         limit:   20,
         order:   'descending',
         ...(cur ? { cursor: cur } : {}),
       })
 
-      setTxs(prev => reset ? res.data : [...prev, ...res.data])
-      setHasMore(res.hasNextPage)
-      setCursor(res.nextCursor)
+      // Also fetch sent transactions
+      const sent = await testnetClient.queryTransactionBlocks({
+        filter:  { FromAddress: address },
+        options: { showEffects: true, showBalanceChanges: true, showInput: true },
+        limit:   20,
+        order:   'descending',
+        ...(cur ? { cursor: cur } : {}),
+      })
+
+      // Merge, deduplicate by digest, sort newest first
+      const merged = [...res.data, ...sent.data]
+      const seen   = new Set()
+      const unique = merged.filter(tx => {
+        if (seen.has(tx.digest)) return false
+        seen.add(tx.digest)
+        return true
+      }).sort((a, b) => Number(b.timestampMs) - Number(a.timestampMs))
+
+      setTxs(prev => {
+        if (reset) return unique
+        const existing = new Set(prev.map(t => t.digest))
+        return [...prev, ...unique.filter(t => !existing.has(t.digest))]
+      })
+      setHasMore(res.hasNextPage || sent.hasNextPage)
+      setCursor(res.nextCursor || sent.nextCursor)
     } catch (err) {
       // Silently handle RPC errors — testnet may be temporarily unavailable
       console.warn('[history]', err?.message)
@@ -230,8 +252,8 @@ export default function HistoryPage() {
 
   const filtered = txs.filter(tx => {
     if (filter === 'All') return true
-    const balChanges = tx?.effects?.balanceChanges || []
-    const myChange = balChanges.find(c =>
+    const balChanges = tx?.balanceChanges || []
+    const myChange   = balChanges.find(c =>
       c.owner?.AddressOwner?.toLowerCase() === address?.toLowerCase()
     )
     if (filter === 'Received') return myChange && Number(myChange.amount) > 0

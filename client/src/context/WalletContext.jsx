@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import { SuiClient, getFullnodeUrl } from '@mysten/sui/client'
 import * as bip39 from 'bip39'
@@ -16,19 +16,37 @@ export function WalletProvider({ children }) {
   const [objects, setObjects] = useState([])
   const [loading, setLoading] = useState(false)
 
+  // Auto-restore keypair on mount if session password is cached
+  useEffect(() => {
+    const pw = sessionStorage.getItem('sui_session_pw')
+    const stored = localStorage.getItem('sui_keystore')
+    if (!pw || !stored) return
+    try {
+      const decrypted = CryptoJS.AES.decrypt(stored, pw)
+      const { mnemonic } = JSON.parse(decrypted.toString(CryptoJS.enc.Utf8))
+      const kp = Ed25519Keypair.deriveKeypair(mnemonic)
+      setKeypair(kp)
+      setAddress(kp.getPublicKey().toSuiAddress())
+    } catch {
+      // Cached password is invalid — clear it so user is prompted to unlock
+      sessionStorage.removeItem('sui_session_pw')
+      sessionStorage.removeItem('sui_unlocked')
+    }
+  }, [])
+
   // Generate a brand new wallet
   const createWallet = useCallback((password) => {
     const mnemonic = bip39.generateMnemonic()
     const kp = Ed25519Keypair.deriveKeypair(mnemonic)
     const addr = kp.getPublicKey().toSuiAddress()
 
-    // Encrypt keystore with user's password
     const keystore = CryptoJS.AES.encrypt(
       JSON.stringify({ mnemonic, privateKey: kp.getSecretKey() }),
       password
     ).toString()
 
     localStorage.setItem('sui_keystore', keystore)
+    sessionStorage.setItem('sui_session_pw', password)
 
     setKeypair(kp)
     setAddress(addr)
@@ -49,6 +67,7 @@ export function WalletProvider({ children }) {
     ).toString()
 
     localStorage.setItem('sui_keystore', keystore)
+    sessionStorage.setItem('sui_session_pw', password)
 
     setKeypair(kp)
     setAddress(addr)
@@ -67,14 +86,18 @@ export function WalletProvider({ children }) {
     const kp = Ed25519Keypair.deriveKeypair(mnemonic)
     const addr = kp.getPublicKey().toSuiAddress()
 
+    sessionStorage.setItem('sui_session_pw', password)
+
     setKeypair(kp)
     setAddress(addr)
 
     return { address: addr }
   }, [])
 
-  // Lock wallet (clear from memory)
+  // Lock wallet (clear from memory and session)
   const lockWallet = useCallback(() => {
+    sessionStorage.removeItem('sui_session_pw')
+    sessionStorage.removeItem('sui_unlocked')
     setKeypair(null)
     setAddress(null)
     setBalance('0')
