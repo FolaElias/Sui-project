@@ -4,7 +4,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:sui.io)",
       "Bash(find 'c:\\\\Users\\\\Admin\\\\Documents\\\\React-Projects\\\\Sui Web3\\\\client\\\\node_modules' -name *.svg)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(node src/seed.js)"
     ]
   }
 }

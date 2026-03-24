@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import toast from 'react-hot-toast'
@@ -12,119 +12,287 @@ api.interceptors.request.use(cfg => {
   return cfg
 })
 
-const TABS = ['Inbox', 'Sent', 'New Offer']
+const TABS        = ['Buy', 'Sell', 'My Trades', 'My Ads']
+const PAY_METHODS = ['Sui Transfer', 'Bank Transfer', 'PayPal', 'Wise']
 
-function statusStyle(status) {
-  const map = {
-    pending:  { color: '#FFD600', bg: 'rgba(255,214,0,0.1)', border: 'rgba(255,214,0,0.2)' },
-    accepted: { color: '#14F195', bg: 'rgba(20,241,149,0.1)', border: 'rgba(20,241,149,0.2)' },
-    declined: { color: '#FF4444', bg: 'rgba(255,68,68,0.1)', border: 'rgba(255,68,68,0.2)' },
-    cancelled:{ color: '#8B949E', bg: 'rgba(139,148,158,0.1)', border: 'rgba(139,148,158,0.2)' },
-    completed:{ color: '#00F0FF', bg: 'rgba(0,240,255,0.1)', border: 'rgba(0,240,255,0.2)' },
-  }
-  return map[status] || map.pending
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function timeAgo(date) {
+  const s = Math.floor((Date.now() - new Date(date)) / 1000)
+  if (s < 60)   return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s/60)}m ago`
+  if (s < 86400)return `${Math.floor(s/3600)}h ago`
+  return `${Math.floor(s/86400)}d ago`
 }
 
-function OfferCard({ offer, isInbox, onAccept, onDecline, onCancel }) {
-  const s = statusStyle(offer.status)
+const STATUS_META = {
+  pending:      { label: 'Awaiting Payment',  color: '#FFD600', icon: '⏳' },
+  payment_sent: { label: 'Payment Sent',      color: '#00F0FF', icon: '💳' },
+  confirming:   { label: 'Confirming',        color: '#9945FF', icon: '🔍' },
+  completed:    { label: 'Completed',         color: '#14F195', icon: '✓'  },
+  disputed:     { label: 'Disputed',          color: '#FF4444', icon: '⚠'  },
+  cancelled:    { label: 'Cancelled',         color: '#8B949E', icon: '✕'  },
+}
+
+// ── Trade status timeline ─────────────────────────────────────────────────────
+const STEPS = ['pending', 'payment_sent', 'confirming', 'completed']
+
+function TradeTimeline({ status }) {
+  const stepIdx = STEPS.indexOf(status)
+  return (
+    <div className="flex items-center gap-0 w-full my-4">
+      {STEPS.map((step, i) => {
+        const done    = i <= stepIdx && status !== 'cancelled' && status !== 'disputed'
+        const current = i === stepIdx && done
+        const meta    = STATUS_META[step]
+        return (
+          <div key={step} className="flex items-center flex-1">
+            <div className="flex flex-col items-center gap-1">
+              <motion.div
+                animate={current ? { scale: [1, 1.2, 1] } : {}}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all"
+                style={{
+                  background: done ? meta.color + '25' : 'rgba(255,255,255,0.05)',
+                  borderColor: done ? meta.color : 'rgba(255,255,255,0.1)',
+                  color: done ? meta.color : '#4B5563',
+                }}
+              >
+                {done ? '✓' : i + 1}
+              </motion.div>
+              <span className="text-[9px] text-brand-muted whitespace-nowrap hidden sm:block capitalize">
+                {step.replace('_', ' ')}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className="flex-1 h-px mx-1 transition-all"
+                style={{ background: i < stepIdx && done ? '#14F195' : 'rgba(255,255,255,0.08)' }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Trade room ────────────────────────────────────────────────────────────────
+function TradeRoom({ tradeId, currentUserId, onBack }) {
+  const [trade, setTrade]   = useState(null)
+  const [msg, setMsg]       = useState('')
+  const [busy, setBusy]     = useState(false)
+  const chatRef             = useRef(null)
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/api/p2p/trades/${tradeId}`)
+      setTrade(data)
+    } catch (err) {
+      if (err?.response?.status !== 401) console.warn('[trade]', err?.message)
+    }
+  }, [tradeId])
+
+  useEffect(() => {
+    load()
+    const iv = setInterval(load, 5000)   // poll every 5 s for chat + status updates
+    return () => clearInterval(iv)
+  }, [load])
+
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
+  }, [trade?.messages?.length])
+
+  const sendMsg = async () => {
+    if (!msg.trim()) return
+    try {
+      await api.post(`/api/p2p/trades/${tradeId}/message`, { text: msg.trim() })
+      setMsg('')
+      load()
+    } catch { toast.error('Failed to send message') }
+  }
+
+  const advance = async (status, extra = {}) => {
+    setBusy(true)
+    try {
+      await api.patch(`/api/p2p/trades/${tradeId}/status`, { status, ...extra })
+      toast.success(STATUS_META[status]?.label || status)
+      load()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Action failed')
+    } finally { setBusy(false) }
+  }
+
+  if (!trade) return (
+    <div className="flex items-center justify-center py-20">
+      <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        className="text-brand-purple text-2xl">⟳</motion.div>
+    </div>
+  )
+
+  const meta      = STATUS_META[trade.status] || STATUS_META.pending
+  const isBuyer   = String(trade.buyer?._id)  === currentUserId
+  const isSeller  = String(trade.seller?._id) === currentUserId
+  const isActive  = !['completed', 'cancelled', 'disputed'].includes(trade.status)
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      className="rounded-2xl border border-brand-border overflow-hidden"
-      style={{ background: 'rgba(255,255,255,0.02)' }}
-    >
-      <div className="p-4">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-3">
+    <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+      {/* Back */}
+      <button onClick={onBack} className="flex items-center gap-2 text-brand-muted hover:text-white text-sm transition-colors">
+        ← Back to P2P
+      </button>
+
+      {/* Trade header */}
+      <div className="rounded-2xl border border-brand-border p-5"
+        style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-medium"
-                style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
-                {offer.status}
+              <span className="text-lg">{meta.icon}</span>
+              <span className="font-bold text-white">
+                {isBuyer ? 'Buying' : 'Selling'} {trade.amount} SUI
               </span>
-              {isInbox && (
-                <span className="text-xs text-brand-muted">
-                  from {offer.from?.username || offer.fromAddress?.slice(0, 10) + '…'}
-                </span>
-              )}
-              {!isInbox && (
-                <span className="text-xs text-brand-muted">
-                  to {offer.toAddress?.slice(0, 10)}…
-                </span>
-              )}
+              <span className="text-xs px-2 py-0.5 rounded-full font-semibold"
+                style={{ color: meta.color, background: meta.color + '18', border: `1px solid ${meta.color}30` }}>
+                {meta.label}
+              </span>
             </div>
-            <p className="text-xs text-brand-muted">
-              {new Date(offer.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            <p className="text-brand-muted text-xs">
+              Counterparty: <span className="text-brand-cyan font-semibold">
+                {isBuyer ? (trade.seller?.username || 'Unknown') : (trade.buyer?.username || 'Unknown')}
+              </span>
+            </p>
+            <p className="text-brand-muted text-xs mt-0.5">
+              Price: <span className="text-white">${trade.pricePerSui}/SUI</span>
+              {' · '}Total: <span className="text-brand-green font-semibold">${(trade.amount * trade.pricePerSui).toFixed(2)}</span>
             </p>
           </div>
-        </div>
-
-        {/* Objects */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-xl border border-brand-border"
-            style={{ background: 'rgba(255,46,247,0.04)' }}>
-            <p className="text-brand-muted text-xs mb-2">Offering</p>
-            {offer.offerObjects?.length > 0 ? (
-              offer.offerObjects.map((id, i) => (
-                <p key={i} className="text-brand-pink text-xs font-mono truncate">{id?.slice(0, 12)}…</p>
-              ))
-            ) : (
-              <p className="text-brand-muted text-xs">—</p>
-            )}
-          </div>
-          <div className="p-3 rounded-xl border border-brand-border"
-            style={{ background: 'rgba(20,241,149,0.04)' }}>
-            <p className="text-brand-muted text-xs mb-2">Requesting</p>
-            {offer.requestObjects?.length > 0 ? (
-              offer.requestObjects.map((id, i) => (
-                <p key={i} className="text-brand-green text-xs font-mono truncate">{id?.slice(0, 12)}…</p>
-              ))
-            ) : (
-              <p className="text-brand-muted text-xs">—</p>
-            )}
+          <div className="text-right text-xs text-brand-muted">
+            <p>Trade ID</p>
+            <p className="text-brand-cyan font-mono">{trade._id?.slice(-8)}</p>
           </div>
         </div>
 
-        {/* Actions */}
-        {offer.status === 'pending' && (
-          <div className="flex gap-2 mt-3">
-            {isInbox ? (
-              <>
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                  onClick={() => onAccept(offer._id)}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold text-black"
-                  style={{ background: '#14F195' }}>
-                  ✓ Accept
-                </motion.button>
-                <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                  onClick={() => onDecline(offer._id)}
-                  className="flex-1 py-2 rounded-xl text-xs font-semibold text-red-400 border border-red-400/20"
-                  style={{ background: 'rgba(255,68,68,0.06)' }}>
-                  ✕ Decline
-                </motion.button>
-              </>
-            ) : (
+        {/* Timeline */}
+        {trade.status !== 'cancelled' && trade.status !== 'disputed' && (
+          <TradeTimeline status={trade.status} />
+        )}
+
+        {/* Action buttons */}
+        {isActive && (
+          <div className="flex gap-2 flex-wrap mt-2">
+            {/* Buyer: mark payment sent */}
+            {isBuyer && trade.status === 'pending' && (
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={() => onCancel(offer._id)}
-                className="flex-1 py-2 rounded-xl text-xs font-semibold text-brand-muted border border-brand-border"
-                style={{ background: 'rgba(255,255,255,0.03)' }}>
-                Cancel Offer
+                onClick={() => advance('payment_sent')} disabled={busy}
+                className="btn-primary px-5 py-2.5 text-sm flex-1 disabled:opacity-50">
+                💳 I've Paid
+              </motion.button>
+            )}
+
+            {/* Seller: confirm payment received + release */}
+            {isSeller && trade.status === 'payment_sent' && (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => advance('confirming')} disabled={busy}
+                className="btn-primary px-5 py-2.5 text-sm flex-1 disabled:opacity-50">
+                🔍 Confirm Receipt
+              </motion.button>
+            )}
+            {isSeller && trade.status === 'confirming' && (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => advance('completed')} disabled={busy}
+                className="px-5 py-2.5 text-sm flex-1 rounded-xl font-bold text-white disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#14F195,#00F0FF)', color: '#0A0A0F' }}>
+                ✓ Release SUI
+              </motion.button>
+            )}
+
+            {/* Dispute */}
+            {!['disputed', 'cancelled'].includes(trade.status) && (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => {
+                  const reason = prompt('Describe the issue:')
+                  if (reason) advance('disputed', { disputeReason: reason })
+                }} disabled={busy}
+                className="px-4 py-2.5 text-sm rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                ⚠ Dispute
+              </motion.button>
+            )}
+
+            {/* Cancel (buyer only, while pending) */}
+            {isBuyer && trade.status === 'pending' && (
+              <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                onClick={() => advance('cancelled')} disabled={busy}
+                className="px-4 py-2.5 text-sm rounded-xl border border-brand-border text-brand-muted hover:text-white transition-colors disabled:opacity-50">
+                Cancel
               </motion.button>
             )}
           </div>
         )}
 
-        {offer.txDigest && (
-          <div className="mt-2 pt-2 border-t border-brand-border">
-            <a href={`https://suiexplorer.com/txblock/${offer.txDigest}?network=testnet`}
-              target="_blank" rel="noreferrer"
-              className="text-brand-cyan text-xs hover:underline">
-              View tx {offer.txDigest.slice(0, 12)}… ↗
-            </a>
+        {/* Payment instructions */}
+        {trade.status === 'pending' && isBuyer && (
+          <div className="mt-4 p-3 rounded-xl border border-brand-cyan/20"
+            style={{ background: 'rgba(0,240,255,0.05)' }}>
+            <p className="text-brand-cyan text-xs font-semibold mb-1">Payment Instructions</p>
+            <p className="text-white text-xs">
+              Send <strong>{trade.amount} SUI</strong> to:
+            </p>
+            <p className="text-brand-cyan font-mono text-xs mt-1 break-all">{trade.sellerAddress}</p>
+            {trade.ad?.terms && (
+              <p className="text-brand-muted text-xs mt-2 italic">"{trade.ad.terms}"</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Chat */}
+      <div className="rounded-2xl border border-brand-border overflow-hidden"
+        style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="px-4 py-3 border-b border-brand-border">
+          <p className="text-white text-sm font-semibold">💬 Trade Chat</p>
+          <p className="text-brand-muted text-xs">Only you and your counterparty can see this</p>
+        </div>
+
+        {/* Messages */}
+        <div ref={chatRef} className="p-4 space-y-3 max-h-64 overflow-y-auto scrollable">
+          {trade.messages?.length === 0 && (
+            <p className="text-brand-muted text-xs text-center py-4">No messages yet. Say hello!</p>
+          )}
+          {trade.messages?.map((m, i) => {
+            const isMe = String(m.sender?._id) === currentUserId
+            return (
+              <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-xs px-3 py-2 rounded-2xl text-sm ${
+                  isMe
+                    ? 'rounded-br-sm text-white'
+                    : 'rounded-bl-sm text-white'
+                }`}
+                  style={{ background: isMe ? 'rgba(153,69,255,0.3)' : 'rgba(255,255,255,0.07)' }}>
+                  {!isMe && (
+                    <p className="text-brand-cyan text-xs font-semibold mb-0.5">{m.sender?.username}</p>
+                  )}
+                  <p>{m.text}</p>
+                  <p className="text-white/40 text-[10px] mt-0.5 text-right">{timeAgo(m.createdAt)}</p>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Input */}
+        {isActive && (
+          <div className="flex gap-2 p-3 border-t border-brand-border">
+            <input
+              className="input flex-1 text-sm py-2"
+              placeholder="Type a message…"
+              value={msg}
+              onChange={e => setMsg(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMsg()}
+            />
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              onClick={sendMsg}
+              className="px-4 py-2 rounded-xl text-sm font-bold text-white"
+              style={{ background: 'linear-gradient(135deg,#9945FF,#6B00FF)' }}>
+              Send
+            </motion.button>
           </div>
         )}
       </div>
@@ -132,276 +300,601 @@ function OfferCard({ offer, isInbox, onAccept, onDecline, onCancel }) {
   )
 }
 
-function NewOfferForm({ onCreated }) {
-  const [toAddress, setToAddress]       = useState('')
-  const [offerIds, setOfferIds]         = useState('')
-  const [requestIds, setRequestIds]     = useState('')
-  const [submitting, setSubmitting]     = useState(false)
-
-  const handleSubmit = async () => {
-    if (!toAddress || !offerIds) {
-      toast.error('Fill in all required fields')
-      return
-    }
-    setSubmitting(true)
-    try {
-      const offerObjects   = offerIds.split(',').map(s => s.trim()).filter(Boolean)
-      const requestObjects = requestIds.split(',').map(s => s.trim()).filter(Boolean)
-      await api.post('/api/p2p', { toAddress, offerObjects, requestObjects })
-      toast.success('Offer sent!')
-      setToAddress(''); setOfferIds(''); setRequestIds('')
-      onCreated()
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to create offer')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
+// ── Ad Card ───────────────────────────────────────────────────────────────────
+function AdCard({ ad, onTrade, currentUserId }) {
+  const isOwn = String(ad.maker?._id) === currentUserId
   return (
-    <div className="rounded-3xl overflow-hidden"
-      style={{
-        background: 'linear-gradient(135deg,rgba(18,18,26,0.9),rgba(10,10,15,0.95))',
-        border: '1px solid rgba(255,46,247,0.15)',
-      }}
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-2xl border border-brand-border p-4 hover:border-brand-purple/40 transition-all"
+      style={{ background: 'rgba(255,255,255,0.02)' }}
     >
-      <div className="h-px w-full"
-        style={{ background: 'linear-gradient(90deg,transparent,#FF2EF7,#9945FF,transparent)' }} />
+      <div className="flex items-start justify-between gap-3">
+        {/* Maker info */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0"
+            style={{ background: 'linear-gradient(135deg,rgba(153,69,255,0.2),rgba(0,240,255,0.1))' }}>
+            {ad.maker?.username?.[0]?.toUpperCase() || '?'}
+          </div>
+          <div className="min-w-0">
+            <p className="text-white font-semibold text-sm">{ad.maker?.username || 'Anonymous'}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-brand-green text-xs font-medium">
+                ✓ {ad.completedTrades} trades
+              </span>
+              <span className="text-brand-muted text-xs">{timeAgo(ad.createdAt)}</span>
+            </div>
+          </div>
+        </div>
 
-      <div className="p-6 space-y-5">
-        <div className="p-4 rounded-2xl border border-brand-border"
-          style={{ background: 'rgba(255,46,247,0.04)' }}>
-          <p className="text-brand-muted text-xs leading-relaxed">
-            <span className="text-brand-pink font-semibold">P2P Trade</span> — Propose a trade directly to another Sui address.
-            Both parties must sign for the trade to complete. Paste the object IDs of NFTs/assets you want to trade.
+        {/* Price */}
+        <div className="text-right shrink-0">
+          <p className="text-xl font-bold font-display" style={{ color: ad.type === 'sell' ? '#14F195' : '#FF2EF7' }}>
+            ${ad.price.toFixed(2)}
           </p>
+          <p className="text-brand-muted text-xs">per SUI</p>
         </div>
-
-        <div>
-          <label className="text-brand-muted text-xs font-medium mb-2 block">Counterparty Address *</label>
-          <input value={toAddress} onChange={e => setToAddress(e.target.value)}
-            placeholder="0x…"
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-brand-border text-white placeholder-brand-muted text-sm font-mono outline-none focus:border-brand-purple/50 transition-colors"
-            style={{ caretColor: '#9945FF' }}
-          />
-        </div>
-
-        <div>
-          <label className="text-brand-muted text-xs font-medium mb-2 block">
-            You Offer — Object IDs * <span className="text-brand-muted/50">(comma-separated)</span>
-          </label>
-          <textarea value={offerIds} onChange={e => setOfferIds(e.target.value)}
-            placeholder="0xabc123…, 0xdef456…"
-            rows={3}
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-brand-border text-white placeholder-brand-muted text-sm font-mono outline-none focus:border-brand-purple/50 transition-colors resize-none"
-            style={{ caretColor: '#9945FF' }}
-          />
-        </div>
-
-        <div>
-          <label className="text-brand-muted text-xs font-medium mb-2 block">
-            You Request — Object IDs <span className="text-brand-muted/50">(optional, comma-separated)</span>
-          </label>
-          <textarea value={requestIds} onChange={e => setRequestIds(e.target.value)}
-            placeholder="0x789abc…"
-            rows={2}
-            className="w-full px-4 py-3 rounded-xl bg-white/5 border border-brand-border text-white placeholder-brand-muted text-sm font-mono outline-none focus:border-brand-purple/50 transition-colors resize-none"
-            style={{ caretColor: '#9945FF' }}
-          />
-        </div>
-
-        <motion.button
-          whileHover={{ scale: 1.02, boxShadow: '0 0 40px rgba(255,46,247,0.4)' }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleSubmit}
-          disabled={submitting || !toAddress || !offerIds}
-          className="w-full py-4 rounded-2xl font-bold text-white text-base flex items-center justify-center gap-2 transition-all disabled:opacity-40"
-          style={{
-            background: 'linear-gradient(135deg,#FF2EF7,#9945FF)',
-            boxShadow: '0 0 20px rgba(255,46,247,0.25)',
-          }}
-        >
-          {submitting ? (
-            <><motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>⟳</motion.span> Sending…</>
-          ) : '⇄ Send Offer'}
-        </motion.button>
       </div>
-    </div>
+
+      {/* Details row */}
+      <div className="grid grid-cols-3 gap-3 mt-4 mb-4">
+        {[
+          { label: 'Available', value: `${ad.totalAmount} SUI` },
+          { label: 'Limit',     value: `${ad.minOrder}–${ad.maxOrder} SUI` },
+          { label: 'Payment',   value: ad.paymentMethod },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-xl p-2.5"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-brand-muted text-[10px] uppercase tracking-wider">{label}</p>
+            <p className="text-white text-xs font-semibold mt-0.5 truncate">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {ad.terms && (
+        <p className="text-brand-muted text-xs italic mb-3 line-clamp-2">"{ad.terms}"</p>
+      )}
+
+      <motion.button
+        whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+        onClick={() => onTrade(ad)}
+        disabled={isOwn}
+        className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        style={isOwn ? { background: 'rgba(255,255,255,0.05)' } : {
+          background: ad.type === 'sell'
+            ? 'linear-gradient(135deg,#14F195,#00AA6D)'
+            : 'linear-gradient(135deg,#FF2EF7,#9945FF)',
+          color: ad.type === 'sell' ? '#0A0A0F' : '#fff',
+          boxShadow: `0 0 20px ${ad.type === 'sell' ? 'rgba(20,241,149,0.3)' : 'rgba(255,46,247,0.3)'}`,
+        }}
+      >
+        {isOwn ? 'Your Ad' : ad.type === 'sell' ? `Buy SUI` : `Sell SUI`}
+      </motion.button>
+    </motion.div>
   )
 }
 
-export default function P2PPage() {
-  const { address } = useWallet()
-  const [tab, setTab]       = useState('Inbox')
-  const [inbox, setInbox]   = useState([])
-  const [sent, setSent]     = useState([])
-  const [loading, setLoading] = useState(false)
+// ── Post Ad Modal ─────────────────────────────────────────────────────────────
+function PostAdModal({ type, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    price: '', totalAmount: '', minOrder: '', maxOrder: '',
+    paymentMethod: 'Sui Transfer', terms: '',
+  })
+  const [busy, setBusy] = useState(false)
 
-  const loadData = async () => {
-    setLoading(true)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const submit = async () => {
+    if (!form.price || !form.totalAmount || !form.minOrder || !form.maxOrder)
+      return toast.error('Fill all required fields')
+    setBusy(true)
     try {
-      const [inboxRes, sentRes] = await Promise.all([
-        api.get('/api/p2p/inbox'),
-        api.get('/api/p2p/sent'),
-      ])
-      setInbox(inboxRes.data)
-      setSent(sentRes.data)
+      await api.post('/api/p2p/ads', {
+        type,
+        price:         Number(form.price),
+        totalAmount:   Number(form.totalAmount),
+        minOrder:      Number(form.minOrder),
+        maxOrder:      Number(form.maxOrder),
+        paymentMethod: form.paymentMethod,
+        terms:         form.terms,
+      })
+      toast.success('Ad posted!')
+      onSuccess()
+      onClose()
     } catch (err) {
-      // 401 = not logged in yet, ignore silently
-      if (err?.response?.status !== 401) {
-        console.warn('[p2p]', err?.message)
-      }
-    } finally {
-      setLoading(false)
-    }
+      toast.error(err?.response?.data?.message || 'Failed to post ad')
+    } finally { setBusy(false) }
   }
-
-  useEffect(() => { loadData() }, [])
-
-  const updateStatus = async (id, status) => {
-    try {
-      await api.patch(`/api/p2p/${id}/status`, { status })
-      toast.success(`Offer ${status}`)
-      loadData()
-    } catch (err) {
-      toast.error('Failed to update offer')
-    }
-  }
-
-  const currentList = tab === 'Inbox' ? inbox : sent
 
   return (
-    <Layout>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 gap-3 flex-wrap">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
-              style={{
-                background: 'linear-gradient(135deg,rgba(255,46,247,0.15),rgba(153,69,255,0.08))',
-                border: '1px solid rgba(255,46,247,0.25)',
-              }}>
-              ⇄
-            </div>
-            <div>
-              <h1 className="text-2xl font-display font-bold text-white">P2P Trade</h1>
-              <p className="text-brand-muted text-sm">Propose and manage peer-to-peer trades</p>
+    <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}
+        onClick={onClose} />
+      <motion.div className="relative w-full max-w-md rounded-3xl overflow-hidden z-10"
+        initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 60, opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+        style={{
+          background: 'linear-gradient(135deg,rgba(18,18,26,0.99),rgba(10,10,15,1))',
+          border: `1px solid ${type === 'sell' ? 'rgba(20,241,149,0.25)' : 'rgba(255,46,247,0.25)'}`,
+        }}>
+        <div className="h-px w-full"
+          style={{ background: `linear-gradient(90deg,transparent,${type === 'sell' ? '#14F195' : '#FF2EF7'},transparent)` }} />
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-display font-bold text-white">
+              Post {type === 'sell' ? 'Sell' : 'Buy'} Ad
+            </h3>
+            <button onClick={onClose} className="text-brand-muted hover:text-white text-xl">✕</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Price per SUI ($)', key: 'price',       placeholder: '3.50' },
+              { label: 'Total Amount (SUI)', key: 'totalAmount', placeholder: '100'  },
+              { label: 'Min Order (SUI)',    key: 'minOrder',    placeholder: '1'    },
+              { label: 'Max Order (SUI)',    key: 'maxOrder',    placeholder: '50'   },
+            ].map(({ label, key, placeholder }) => (
+              <div key={key}>
+                <label className="text-xs text-brand-muted font-semibold uppercase tracking-wider mb-1 block">{label}</label>
+                <input type="number" min="0" step="0.01" className="input text-sm py-2"
+                  placeholder={placeholder} value={form[key]} onChange={e => set(key, e.target.value)} />
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="text-xs text-brand-muted font-semibold uppercase tracking-wider mb-1 block">Payment Method</label>
+            <div className="flex flex-wrap gap-2">
+              {PAY_METHODS.map(m => (
+                <button key={m} onClick={() => set('paymentMethod', m)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
+                  style={form.paymentMethod === m ? {
+                    background: type === 'sell' ? 'rgba(20,241,149,0.15)' : 'rgba(255,46,247,0.15)',
+                    border: `1px solid ${type === 'sell' ? '#14F195' : '#FF2EF7'}40`,
+                    color: type === 'sell' ? '#14F195' : '#FF2EF7',
+                  } : {
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#6B7280'
+                  }}>
+                  {m}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {inbox.filter(o => o.status === 'pending').length > 0 && (
-              <motion.span
-                animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-brand-pink"
-                style={{ boxShadow: '0 0 8px #FF2EF7' }}
-              />
-            )}
-            <motion.button
-              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={loadData} disabled={loading}
-              className="px-4 py-2 rounded-xl text-sm text-brand-muted border border-brand-border hover:text-white transition-colors flex items-center gap-2 disabled:opacity-40"
-              style={{ background: 'rgba(255,255,255,0.03)' }}
-            >
-              <motion.span animate={loading ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: loading ? Infinity : 0, ease: 'linear' }}>⟳</motion.span>
-              Refresh
+          <div>
+            <label className="text-xs text-brand-muted font-semibold uppercase tracking-wider mb-1 block">
+              Terms <span className="font-normal normal-case opacity-60">(optional)</span>
+            </label>
+            <textarea className="input resize-none text-sm" rows={2}
+              placeholder="e.g. Payment within 15 mins, verified accounts only…"
+              value={form.terms} onChange={e => set('terms', e.target.value)} />
+          </div>
+
+          <div className="flex gap-3">
+            <button className="btn-ghost flex-1 py-3" onClick={onClose}>Cancel</button>
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              className="flex-1 py-3 rounded-xl font-bold text-sm transition-all"
+              style={{
+                background: type === 'sell'
+                  ? 'linear-gradient(135deg,#14F195,#00AA6D)'
+                  : 'linear-gradient(135deg,#FF2EF7,#9945FF)',
+                color: type === 'sell' ? '#0A0A0F' : '#fff',
+              }}
+              onClick={submit} disabled={busy}>
+              {busy ? 'Posting…' : 'Post Ad'}
             </motion.button>
           </div>
         </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// ── Initiate Trade Modal ──────────────────────────────────────────────────────
+function InitiateModal({ ad, onClose, onStarted }) {
+  const [amount, setAmount] = useState(ad.minOrder)
+  const [busy,   setBusy]   = useState(false)
+
+  const total = (Number(amount) * ad.price).toFixed(2)
+
+  const submit = async () => {
+    if (!amount || amount < ad.minOrder || amount > ad.maxOrder)
+      return toast.error(`Amount must be ${ad.minOrder}–${ad.maxOrder} SUI`)
+    setBusy(true)
+    try {
+      const { data } = await api.post(`/api/p2p/ads/${ad._id}/trade`, { amount: Number(amount) })
+      toast.success('Trade started!')
+      onStarted(data._id)
+      onClose()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to start trade')
+    } finally { setBusy(false) }
+  }
+
+  const adColor = ad.type === 'sell' ? '#14F195' : '#FF2EF7'
+
+  return (
+    <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-4 pb-4 sm:pb-0"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="absolute inset-0"
+        style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}
+        onClick={onClose} />
+      <motion.div className="relative w-full max-w-sm rounded-3xl overflow-hidden z-10"
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        style={{
+          background: 'linear-gradient(135deg,rgba(18,18,26,0.99),rgba(10,10,15,1))',
+          border: `1px solid ${adColor}30`,
+        }}>
+        <div className="h-px w-full"
+          style={{ background: `linear-gradient(90deg,transparent,${adColor},transparent)` }} />
+        <div className="p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-display font-bold text-white">
+              {ad.type === 'sell' ? 'Buy SUI' : 'Sell SUI'}
+            </h3>
+            <button onClick={onClose} className="text-brand-muted hover:text-white">✕</button>
+          </div>
+
+          {/* Seller info */}
+          <div className="flex items-center gap-3 p-3 rounded-xl"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg"
+              style={{ background: `${adColor}20` }}>
+              {ad.maker?.username?.[0]?.toUpperCase() || '?'}
+            </div>
+            <div>
+              <p className="text-white font-semibold text-sm">{ad.maker?.username}</p>
+              <p className="text-brand-green text-xs">✓ {ad.completedTrades} completed trades</p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="font-bold" style={{ color: adColor }}>${ad.price.toFixed(2)}</p>
+              <p className="text-brand-muted text-xs">per SUI</p>
+            </div>
+          </div>
+
+          {/* Amount input */}
+          <div>
+            <label className="text-xs text-brand-muted font-semibold uppercase tracking-wider mb-2 block">
+              Amount (SUI) · Limit: {ad.minOrder}–{ad.maxOrder}
+            </label>
+            <div className="relative">
+              <input type="number" className="input pr-16 text-lg font-bold"
+                min={ad.minOrder} max={ad.maxOrder} step="0.1"
+                value={amount} onChange={e => setAmount(e.target.value)} />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-cyan font-bold text-sm">SUI</span>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="rounded-xl p-4 space-y-2"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {[
+              ['You get',    `${amount} SUI`],
+              ['You pay',    `$${total}`    ],
+              ['Rate',       `$${ad.price}/SUI`],
+              ['Payment via', ad.paymentMethod],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between text-sm">
+                <span className="text-brand-muted">{k}</span>
+                <span className="text-white font-semibold">{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <button className="btn-ghost flex-1 py-3" onClick={onClose}>Cancel</button>
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+              className="flex-1 py-3 rounded-xl font-bold text-sm"
+              style={{
+                background: ad.type === 'sell'
+                  ? 'linear-gradient(135deg,#14F195,#00AA6D)'
+                  : 'linear-gradient(135deg,#FF2EF7,#9945FF)',
+                color: ad.type === 'sell' ? '#0A0A0F' : '#fff',
+              }}
+              onClick={submit} disabled={busy}>
+              {busy ? 'Starting…' : ad.type === 'sell' ? 'Buy Now' : 'Sell Now'}
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function P2PPage() {
+  const { address }   = useWallet()
+  const token         = localStorage.getItem('token')
+  const currentUserId = (() => {
+    try { return JSON.parse(atob(token?.split('.')[1] || ''))?.id } catch { return null }
+  })()
+
+  const [tab,       setTab]       = useState(0)
+  const [ads,       setAds]       = useState([])
+  const [trades,    setTrades]    = useState([])
+  const [myAds,     setMyAds]     = useState([])
+  const [loading,   setLoading]   = useState(false)
+
+  const [showPostModal,   setShowPostModal]   = useState(null)   // 'buy' | 'sell' | null
+  const [initiateAd,      setInitiateAd]      = useState(null)   // ad object
+  const [openTradeId,     setOpenTradeId]     = useState(null)   // trade _id string
+
+  // Fetch ads (Buy tab shows 'sell' ads, Sell tab shows 'buy' ads)
+  const loadAds = useCallback(async () => {
+    setLoading(true)
+    try {
+      const adType = tab === 0 ? 'sell' : 'buy'
+      const { data } = await api.get(`/api/p2p/ads?type=${adType}`)
+      setAds(data)
+    } catch (err) {
+      if (err?.response?.status !== 401) console.warn('[p2p ads]', err?.message)
+    } finally { setLoading(false) }
+  }, [tab])
+
+  const loadTrades = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/p2p/trades')
+      setTrades(data)
+    } catch (err) {
+      if (err?.response?.status !== 401) console.warn('[p2p trades]', err?.message)
+    }
+  }, [])
+
+  const loadMyAds = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/p2p/my-ads')
+      setMyAds(data)
+    } catch (err) {
+      if (err?.response?.status !== 401) console.warn('[p2p myads]', err?.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 0 || tab === 1) loadAds()
+    if (tab === 2) loadTrades()
+    if (tab === 3) loadMyAds()
+  }, [tab]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const removeMyAd = async (id) => {
+    try {
+      await api.delete(`/api/p2p/ads/${id}`)
+      toast.success('Ad removed')
+      loadMyAds()
+    } catch { toast.error('Failed to remove ad') }
+  }
+
+  // If trade room is open, render it full-screen
+  if (openTradeId) {
+    return (
+      <Layout>
+        <TradeRoom
+          tradeId={openTradeId}
+          currentUserId={currentUserId}
+          onBack={() => { setOpenTradeId(null); setTab(2); loadTrades() }}
+        />
+      </Layout>
+    )
+  }
+
+  return (
+    <Layout>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 pb-10">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-white">
+              P2P <span className="gradient-text">Trading</span>
+            </h1>
+            <p className="text-brand-muted text-sm mt-1">
+              Buy and sell SUI directly with other users — no middleman
+            </p>
+          </div>
+          {token && (
+            <div className="flex gap-2">
+              <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => setShowPostModal('sell')}
+                className="px-4 py-2 rounded-xl text-sm font-bold"
+                style={{ background: 'linear-gradient(135deg,#14F195,#00AA6D)', color: '#0A0A0F' }}>
+                + Sell Ad
+              </motion.button>
+              <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => setShowPostModal('buy')}
+                className="px-4 py-2 rounded-xl text-sm font-bold"
+                style={{ background: 'linear-gradient(135deg,#FF2EF7,#9945FF)' }}>
+                + Buy Ad
+              </motion.button>
+            </div>
+          )}
+        </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-          {TABS.map(t => (
-            <motion.button key={t} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              onClick={() => setTab(t)}
-              className="px-5 py-2 rounded-xl text-sm font-medium relative transition-all"
-              style={tab === t ? {
-                background: 'linear-gradient(135deg,rgba(255,46,247,0.15),rgba(153,69,255,0.08))',
-                border: '1px solid rgba(255,46,247,0.3)',
-                color: '#FF2EF7',
-              } : {
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                color: '#8B949E',
-              }}
-            >
+        <div className="flex gap-1 p-1 rounded-2xl border border-brand-border w-fit overflow-x-auto"
+          style={{ background: 'rgba(255,255,255,0.02)' }}>
+          {TABS.map((t, i) => (
+            <motion.button key={t} whileTap={{ scale: 0.96 }} onClick={() => setTab(i)}
+              className="px-5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap relative"
+              style={tab === i ? {
+                background: 'linear-gradient(135deg,rgba(153,69,255,0.25),rgba(0,240,255,0.1))',
+                color: '#fff', border: '1px solid rgba(153,69,255,0.35)',
+              } : { color: '#6B7280' }}>
               {t}
-              {t === 'Inbox' && inbox.filter(o => o.status === 'pending').length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs font-bold text-white flex items-center justify-center"
-                  style={{ background: '#FF2EF7', fontSize: '10px' }}>
-                  {inbox.filter(o => o.status === 'pending').length}
+              {t === 'My Trades' && trades.filter(tr => ['pending','payment_sent','confirming'].includes(tr.status)).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-bold flex items-center justify-center"
+                  style={{ background: '#FF2EF7', color: '#fff' }}>
+                  {trades.filter(tr => ['pending','payment_sent','confirming'].includes(tr.status)).length}
                 </span>
               )}
             </motion.button>
           ))}
         </div>
 
-        {/* Content */}
-        <AnimatePresence mode="wait">
-          {tab === 'New Offer' ? (
-            <motion.div key="new" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <NewOfferForm onCreated={() => { setTab('Sent'); loadData() }} />
-            </motion.div>
-          ) : loading ? (
-            <motion.div key="loading" className="space-y-3">
-              {Array(4).fill(0).map((_, i) => (
-                <div key={i} className="h-32 rounded-2xl border border-brand-border animate-pulse"
-                  style={{ background: 'rgba(255,255,255,0.02)' }} />
-              ))}
-            </motion.div>
-          ) : currentList.length === 0 ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-24 text-center"
-            >
-              <div className="relative mb-6">
-                {[60, 90, 120].map((size, i) => (
-                  <motion.div key={size}
-                    animate={{ rotate: i % 2 === 0 ? 360 : -360 }}
-                    transition={{ duration: 10 + i * 4, repeat: Infinity, ease: 'linear' }}
-                    className="absolute border border-brand-pink/10 rounded-full"
-                    style={{ width: size, height: size, top: '50%', left: '50%', marginLeft: -size / 2, marginTop: -size / 2 }}
-                  />
-                ))}
-                <motion.span animate={{ y: [0, -8, 0] }} transition={{ duration: 3, repeat: Infinity }}
-                  className="relative z-10 text-5xl block">⇄</motion.span>
-              </div>
-              <h3 className="text-white font-display font-bold text-xl mb-2">
-                {tab === 'Inbox' ? 'No incoming offers' : 'No sent offers'}
-              </h3>
-              <p className="text-brand-muted text-sm max-w-xs mb-6">
-                {tab === 'Inbox'
-                  ? 'When someone proposes a trade with you, it will appear here.'
-                  : 'Start a new P2P trade by clicking "New Offer".'}
+        {/* ── Buy / Sell tabs: ad board ── */}
+        {(tab === 0 || tab === 1) && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-brand-muted text-sm">
+                <span className="text-white font-semibold">{ads.length}</span>{' '}
+                {tab === 0 ? 'sellers' : 'buyers'} available
               </p>
-              <motion.button
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={() => setTab('New Offer')}
-                className="px-6 py-3 rounded-xl text-sm font-bold text-white"
-                style={{ background: 'linear-gradient(135deg,#FF2EF7,#9945FF)', boxShadow: '0 0 20px rgba(255,46,247,0.3)' }}>
-                ⇄ New Offer
-              </motion.button>
-            </motion.div>
-          ) : (
-            <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="space-y-3">
-              <AnimatePresence>
-                {currentList.map(offer => (
-                  <OfferCard
-                    key={offer._id}
-                    offer={offer}
-                    isInbox={tab === 'Inbox'}
-                    onAccept={id => updateStatus(id, 'accepted')}
-                    onDecline={id => updateStatus(id, 'declined')}
-                    onCancel={id => updateStatus(id, 'cancelled')}
-                  />
+              <button onClick={loadAds} className="text-brand-muted text-xs hover:text-white transition-colors flex items-center gap-1">
+                <motion.span animate={loading ? { rotate: 360 } : {}} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>⟳</motion.span>
+                Refresh
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="rounded-2xl border border-brand-border p-4 animate-pulse h-40"
+                    style={{ background: 'rgba(255,255,255,0.02)' }} />
                 ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </div>
+            ) : ads.length === 0 ? (
+              <div className="flex flex-col items-center py-20 text-center">
+                <motion.div animate={{ y: [0,-8,0] }} transition={{ duration: 3, repeat: Infinity }} className="text-5xl mb-4">
+                  {tab === 0 ? '🛒' : '💰'}
+                </motion.div>
+                <p className="text-white font-semibold text-lg mb-2">No {tab === 0 ? 'sell' : 'buy'} ads yet</p>
+                <p className="text-brand-muted text-sm mb-5">Be the first to post one</p>
+                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}
+                  onClick={() => setShowPostModal(tab === 0 ? 'sell' : 'buy')}
+                  className="btn-primary px-8 py-3 text-sm">
+                  Post Ad
+                </motion.button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ads.map(ad => (
+                  <AdCard key={ad._id} ad={ad} currentUserId={currentUserId}
+                    onTrade={ad => setInitiateAd(ad)} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── My Trades tab ── */}
+        {tab === 2 && (
+          <div className="space-y-3">
+            {trades.length === 0 ? (
+              <div className="flex flex-col items-center py-20 text-center">
+                <motion.div animate={{ y: [0,-8,0] }} transition={{ duration: 3, repeat: Infinity }} className="text-5xl mb-4">⇄</motion.div>
+                <p className="text-white font-semibold text-lg mb-2">No trades yet</p>
+                <p className="text-brand-muted text-sm">Browse the Buy or Sell tab to start trading</p>
+              </div>
+            ) : trades.map(trade => {
+              const meta    = STATUS_META[trade.status] || STATUS_META.pending
+              const isBuyer = String(trade.buyer?._id) === currentUserId
+              const other   = isBuyer ? trade.seller?.username : trade.buyer?.username
+              return (
+                <motion.div key={trade._id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  onClick={() => setOpenTradeId(trade._id)}
+                  className="rounded-2xl border border-brand-border p-4 cursor-pointer hover:border-brand-purple/40 transition-all flex items-center justify-between gap-3"
+                  style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                      style={{ background: meta.color + '18', border: `1px solid ${meta.color}30` }}>
+                      {meta.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm">
+                        {isBuyer ? 'Buying' : 'Selling'} {trade.amount} SUI
+                      </p>
+                      <p className="text-brand-muted text-xs">
+                        with <span className="text-brand-cyan">{other || '—'}</span>
+                        {' · '}{timeAgo(trade.createdAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs px-2 py-1 rounded-full font-semibold"
+                      style={{ color: meta.color, background: meta.color + '18', border: `1px solid ${meta.color}30` }}>
+                      {meta.label}
+                    </span>
+                    <p className="text-brand-muted text-xs mt-1">→ Open</p>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* ── My Ads tab ── */}
+        {tab === 3 && (
+          <div className="space-y-3">
+            {myAds.length === 0 ? (
+              <div className="flex flex-col items-center py-20 text-center">
+                <motion.div animate={{ y: [0,-8,0] }} transition={{ duration: 3, repeat: Infinity }} className="text-5xl mb-4">📋</motion.div>
+                <p className="text-white font-semibold text-lg mb-2">No ads posted</p>
+                <p className="text-brand-muted text-sm mb-5">Post a buy or sell ad to get started</p>
+              </div>
+            ) : myAds.map(ad => (
+              <motion.div key={ad._id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="rounded-2xl border border-brand-border p-4"
+                style={{ background: 'rgba(255,255,255,0.02)' }}>
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold capitalize"
+                        style={{
+                          color: ad.type === 'sell' ? '#14F195' : '#FF2EF7',
+                          background: ad.type === 'sell' ? 'rgba(20,241,149,0.1)' : 'rgba(255,46,247,0.1)',
+                          border: `1px solid ${ad.type === 'sell' ? 'rgba(20,241,149,0.2)' : 'rgba(255,46,247,0.2)'}`,
+                        }}>
+                        {ad.type} Ad
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full capitalize"
+                        style={{
+                          color: ad.status === 'active' ? '#14F195' : '#8B949E',
+                          background: 'rgba(255,255,255,0.05)',
+                        }}>
+                        ● {ad.status}
+                      </span>
+                    </div>
+                    <p className="text-white font-semibold">{ad.totalAmount} SUI · ${ad.price}/SUI</p>
+                    <p className="text-brand-muted text-xs">Limit: {ad.minOrder}–{ad.maxOrder} SUI · {ad.completedTrades} trades completed</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => api.patch(`/api/p2p/ads/${ad._id}`, { status: ad.status === 'active' ? 'paused' : 'active' }).then(loadMyAds)}
+                      className="px-3 py-1.5 rounded-xl text-xs border border-brand-border text-brand-muted hover:text-white transition-colors">
+                      {ad.status === 'active' ? 'Pause' : 'Activate'}
+                    </button>
+                    <button onClick={() => removeMyAd(ad._id)}
+                      className="px-3 py-1.5 rounded-xl text-xs border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors">
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </motion.div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showPostModal && (
+          <PostAdModal
+            type={showPostModal}
+            onClose={() => setShowPostModal(null)}
+            onSuccess={() => { loadAds(); loadMyAds() }}
+          />
+        )}
+        {initiateAd && (
+          <InitiateModal
+            ad={initiateAd}
+            onClose={() => setInitiateAd(null)}
+            onStarted={(id) => { setOpenTradeId(id); loadTrades() }}
+          />
+        )}
+      </AnimatePresence>
     </Layout>
   )
 }
