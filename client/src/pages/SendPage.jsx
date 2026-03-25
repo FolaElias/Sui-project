@@ -4,6 +4,7 @@ import { Transaction } from '@mysten/sui/transactions'
 import toast from 'react-hot-toast'
 import Layout from '../components/shared/Layout'
 import { useWallet } from '../context/WalletContext'
+import PinModal, { hasPin, getBanRemaining } from '../components/shared/PinModal'
 
 const MIST = 1_000_000_000
 
@@ -105,7 +106,20 @@ export default function SendPage() {
   const [amount, setAmount]       = useState('')
   const [memo, setMemo]           = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
+  const [showPin, setShowPin]     = useState(false)
   const [sending, setSending]     = useState(false)
+  const [banRemaining, setBanRemaining] = useState(getBanRemaining)
+
+  // Countdown timer while banned
+  useEffect(() => {
+    if (banRemaining <= 0) return
+    const t = setInterval(() => {
+      const rem = getBanRemaining()
+      setBanRemaining(rem)
+      if (rem <= 0) clearInterval(t)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [banRemaining])
   const [txDigest, setTxDigest]   = useState(null)
   const [addrError, setAddrError] = useState('')
   const [amtError, setAmtError]   = useState('')
@@ -117,6 +131,12 @@ export default function SendPage() {
   }, [address])
 
   const validateAndConfirm = () => {
+    const ban = getBanRemaining()
+    if (ban > 0) {
+      setBanRemaining(ban)
+      toast.error(`Sending blocked. Try again in ${Math.ceil(ban / 1000)}s`)
+      return
+    }
     let ok = true
     if (!isValidAddr(recipient)) {
       setAddrError('Invalid Sui address (must be 0x + 64 hex chars)')
@@ -323,21 +343,42 @@ export default function SendPage() {
               )}
             </AnimatePresence>
 
+            {/* Ban notice */}
+            <AnimatePresence>
+              {banRemaining > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="flex items-center gap-3 p-3 rounded-2xl"
+                  style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+                >
+                  <span className="text-xl">🚫</span>
+                  <div className="flex-1">
+                    <p className="text-red-400 text-sm font-semibold">Sending blocked</p>
+                    <p className="text-red-400/70 text-xs">Too many wrong PIN attempts. Try again in{' '}
+                      <span className="font-mono font-bold text-red-400">
+                        {Math.floor(banRemaining / 60000)}:{String(Math.floor((banRemaining % 60000) / 1000)).padStart(2, '0')}
+                      </span>
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* CTA */}
             <motion.button
-              whileHover={{ scale: 1.02, boxShadow: '0 0 40px rgba(255,46,247,0.4)' }}
+              whileHover={{ scale: banRemaining > 0 ? 1 : 1.02, boxShadow: banRemaining > 0 ? 'none' : '0 0 40px rgba(255,46,247,0.4)' }}
               whileTap={{ scale: 0.98 }}
               onClick={validateAndConfirm}
-              disabled={!keypair || !recipient || !amount}
+              disabled={!keypair || !recipient || !amount || banRemaining > 0}
               className="w-full py-4 rounded-2xl font-bold text-white text-base flex items-center justify-center gap-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
-                background: (!keypair || !recipient || !amount)
+                background: (!keypair || !recipient || !amount || banRemaining > 0)
                   ? 'rgba(255,255,255,0.05)'
                   : 'linear-gradient(135deg,#FF2EF7,#9945FF)',
-                boxShadow: (!keypair || !recipient || !amount) ? 'none' : '0 0 20px rgba(255,46,247,0.3)',
+                boxShadow: (!keypair || !recipient || !amount || banRemaining > 0) ? 'none' : '0 0 20px rgba(255,46,247,0.3)',
               }}
             >
-              {!keypair ? '🔒 Wallet Locked' : '↑ Continue'}
+              {banRemaining > 0 ? `🚫 Blocked (${Math.floor(banRemaining / 60000)}:${String(Math.floor((banRemaining % 60000) / 1000)).padStart(2, '0')})` : !keypair ? '🔒 Wallet Locked' : '↑ Continue'}
             </motion.button>
           </div>
 
@@ -357,9 +398,29 @@ export default function SendPage() {
           <ConfirmModal
             to={recipient}
             amount={amount}
-            onConfirm={executeSend}
+            onConfirm={() => {
+              if (!hasPin()) {
+                toast.error('Set a transaction PIN first in Settings → Security')
+                return
+              }
+              setShowConfirm(false)
+              setShowPin(true)
+            }}
             onCancel={() => setShowConfirm(false)}
             sending={sending}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* PIN modal */}
+      <AnimatePresence>
+        {showPin && (
+          <PinModal
+            title="Confirm Send"
+            subtitle="Enter your 4-digit PIN to authorise"
+            onSuccess={() => { setShowPin(false); executeSend() }}
+            onCancel={() => setShowPin(false)}
+            onLockout={() => setBanRemaining(getBanRemaining())}
           />
         )}
       </AnimatePresence>

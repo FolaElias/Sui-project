@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import Layout from '../components/shared/Layout'
 import { useWallet } from '../context/WalletContext'
 import { useAuth } from '../context/AuthContext'
+import { hasPin, savePin, verifyPin } from '../components/shared/PinModal'
 
 function Section({ title, icon, color, children }) {
   return (
@@ -186,6 +187,112 @@ function RevealMnemonicModal({ onClose }) {
   )
 }
 
+function PinSetup() {
+  const pinExists = hasPin()
+  const [mode, setMode]       = useState(null) // null | 'set' | 'change'
+  const [step, setStep]       = useState(1)    // 1=enter new, 2=confirm new, 3=verify old
+  const [pin, setPin]         = useState('')
+  const [pinConfirm, setPinConfirm] = useState('')
+  const [oldPin, setOldPin]   = useState('')
+  const [error, setError]     = useState('')
+
+  const reset = () => { setMode(null); setStep(1); setPin(''); setPinConfirm(''); setOldPin(''); setError('') }
+
+  const PinInput = ({ value, onChange, placeholder }) => (
+    <div className="flex gap-3 justify-center my-4">
+      {[0,1,2,3].map(i => (
+        <input
+          key={i}
+          type="password"
+          maxLength={1}
+          inputMode="numeric"
+          pattern="[0-9]"
+          value={value[i] || ''}
+          onChange={e => {
+            const v = e.target.value.replace(/\D/,'')
+            const arr = value.split('')
+            arr[i] = v
+            onChange(arr.join(''))
+            if (v && i < 3) document.getElementById(`pin-${i+1}`)?.focus()
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Backspace' && !value[i] && i > 0) document.getElementById(`pin-${i-1}`)?.focus()
+          }}
+          id={`pin-${i}`}
+          className="w-12 h-14 text-center text-xl font-bold rounded-xl text-white outline-none focus:ring-2 focus:ring-purple-500"
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+        />
+      ))}
+    </div>
+  )
+
+  const handleSave = () => {
+    if (pin.length < 4) return setError('Enter a 4-digit PIN')
+    if (pin !== pinConfirm) return setError('PINs do not match')
+    if (mode === 'change' && !verifyPin(oldPin)) return setError('Current PIN is incorrect')
+    savePin(pin)
+    toast.success(pinExists ? 'PIN updated!' : 'PIN set successfully!')
+    reset()
+  }
+
+  if (!mode) return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-white text-sm font-medium">Transaction PIN</p>
+          <p className="text-brand-muted text-xs mt-0.5">Required before every send</p>
+        </div>
+        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${pinExists ? 'text-green-400 bg-green-400/10 border border-green-400/20' : 'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20'}`}>
+          {pinExists ? '✓ Active' : '⚠ Not set'}
+        </span>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <motion.button whileTap={{ scale: 0.97 }}
+          onClick={() => { setMode('set'); setStep(1) }}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+          style={{ background: 'linear-gradient(135deg, rgba(167,139,250,0.2), rgba(96,165,250,0.1))', border: '1px solid rgba(167,139,250,0.3)' }}>
+          {pinExists ? 'Reset PIN' : '+ Set PIN'}
+        </motion.button>
+        {pinExists && (
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => { setMode('change'); setStep(3) }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-brand-muted border border-brand-border hover:text-white transition-colors"
+            style={{ background: 'rgba(255,255,255,0.03)' }}>
+            Change PIN
+          </motion.button>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-2">
+      <p className="text-white text-sm font-semibold text-center">
+        {step === 3 ? 'Enter current PIN' : step === 1 ? 'Choose a 4-digit PIN' : 'Confirm your PIN'}
+      </p>
+      {step === 3 && <PinInput value={oldPin} onChange={setOldPin} />}
+      {step === 1 && <PinInput value={pin} onChange={setPin} />}
+      {step === 2 && <PinInput value={pinConfirm} onChange={setPinConfirm} />}
+      {error && <p className="text-red-400 text-xs text-center">{error}</p>}
+      <div className="flex gap-2 pt-2">
+        <button onClick={reset} className="flex-1 py-2.5 rounded-xl text-sm text-brand-muted border border-brand-border hover:text-white transition-colors"
+          style={{ background: 'rgba(255,255,255,0.03)' }}>Cancel</button>
+        <motion.button whileTap={{ scale: 0.97 }}
+          onClick={() => {
+            setError('')
+            if (step === 3) { if (verifyPin(oldPin)) setStep(1); else setError('Incorrect PIN') }
+            else if (step === 1) { if (pin.length === 4) setStep(2); else setError('Enter 4 digits') }
+            else handleSave()
+          }}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg, #7c3aed, #3b82f6)' }}>
+          {step === 2 ? 'Save PIN' : 'Next →'}
+        </motion.button>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
   const { address, balance } = useWallet()
   const { user, savedEmail, logout } = useAuth()
@@ -272,6 +379,11 @@ export default function SettingsPage() {
             <InfoRow label="Username" value={user?.username || '—'} />
             <InfoRow label="Email"    value={user?.email || savedEmail || '—'} />
             <InfoRow label="Sui Address" value={user?.suiAddress ? `${user.suiAddress.slice(0,10)}…` : address ? `${address.slice(0,10)}…` : '—'} />
+          </Section>
+
+          {/* Security — PIN */}
+          <Section title="Security" icon="🔐" color="#a78bfa">
+            <PinSetup />
           </Section>
 
           {/* About */}
