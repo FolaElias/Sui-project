@@ -308,10 +308,10 @@ export default function Layout({ children }) {
 
         {/* Ambient background */}
         <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
-          <div className="absolute w-[600px] h-[600px] rounded-full blur-3xl opacity-10"
-            style={{ background: '#9945FF', top: '-10%', right: '-5%', animation: 'floatY 8s ease-in-out infinite' }} />
-          <div className="absolute w-[500px] h-[500px] rounded-full blur-3xl opacity-8"
-            style={{ background: '#00F0FF', bottom: '-10%', left: '10%', animation: 'floatY 10s ease-in-out infinite reverse' }} />
+          <div className="absolute w-[700px] h-[700px] rounded-full blur-3xl opacity-40"
+            style={{ background: '#6d28d9', top: '-15%', right: '-10%', animation: 'floatY 8s ease-in-out infinite' }} />
+          <div className="absolute w-[600px] h-[600px] rounded-full blur-3xl opacity-30"
+            style={{ background: '#1d4ed8', bottom: '-15%', left: '5%', animation: 'floatY 10s ease-in-out infinite reverse' }} />
           <div className="absolute inset-0"
             style={{
               backgroundImage: 'linear-gradient(rgba(153,69,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(153,69,255,0.03) 1px, transparent 1px)',

@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
+import { SuiClient, getFullnodeUrl } from '@mysten/sui/client'
 import { useWallet } from '../context/WalletContext'
 import Layout from '../components/shared/Layout'
+
+const testnetClient = new SuiClient({ url: getFullnodeUrl('testnet') })
+const MIST = 1_000_000_000
 
 const quickActions = [
   { href: '/send',        icon: '↑', label: 'Send',       desc: 'Transfer assets',  color: '#FF2EF7', bg: 'rgba(255,46,247,0.08)',  border: 'rgba(255,46,247,0.25)' },
@@ -42,6 +47,126 @@ const container = {
 const item = {
   hidden: { opacity: 0, y: 24 },
   show:   { opacity: 1, y: 0, transition: { ease: 'easeOut', duration: 0.4 } }
+}
+
+function RecentTxs({ address }) {
+  const [txs, setTxs]         = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!address) return
+    setLoading(true)
+    Promise.all([
+      testnetClient.queryTransactionBlocks({
+        filter: { ToAddress: address },
+        options: { showEffects: true, showBalanceChanges: true },
+        limit: 5, order: 'descending',
+      }),
+      testnetClient.queryTransactionBlocks({
+        filter: { FromAddress: address },
+        options: { showEffects: true, showBalanceChanges: true },
+        limit: 5, order: 'descending',
+      }),
+    ]).then(([received, sent]) => {
+      const seen = new Set()
+      const merged = [...received.data, ...sent.data]
+        .filter(tx => { if (seen.has(tx.digest)) return false; seen.add(tx.digest); return true })
+        .sort((a, b) => Number(b.timestampMs) - Number(a.timestampMs))
+        .slice(0, 5)
+      setTxs(merged)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [address])
+
+  const getChange = (tx) => {
+    const changes = tx?.balanceChanges || []
+    const mine = changes.find(c => c.owner?.AddressOwner?.toLowerCase() === address?.toLowerCase())
+    if (!mine) return null
+    const val = Number(mine.amount)
+    return {
+      positive: val > 0,
+      amount: `${val > 0 ? '+' : ''}${(val / MIST).toFixed(4)} SUI`,
+      color: val > 0 ? '#4ade80' : '#f472b6',
+      icon: val > 0 ? '↓' : '↑',
+      label: val > 0 ? 'Received' : 'Sent',
+    }
+  }
+
+  return (
+    <motion.div variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-brand-muted text-xs font-semibold uppercase tracking-widest">Recent Transactions</p>
+        <Link to="/history" className="text-brand-cyan text-xs hover:underline">View all →</Link>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-2xl h-14 animate-pulse"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
+          ))}
+        </div>
+      ) : txs.length === 0 ? (
+        <div className="rounded-2xl flex flex-col items-center justify-center py-12 text-center"
+          style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(153,69,255,0.2)' }}>
+          <span className="text-3xl mb-3 opacity-50">◷</span>
+          <p className="text-brand-muted text-sm">No transactions yet</p>
+          <Link to="/receive" className="text-brand-cyan text-xs mt-2 hover:underline">Get SUI from faucet →</Link>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {txs.map(tx => {
+            const ch = getChange(tx)
+            const date = new Date(Number(tx.timestampMs))
+            const status = tx?.effects?.status?.status
+            return (
+              <motion.div key={tx.digest}
+                initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-3 rounded-2xl px-4 py-3"
+                style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                {/* Icon */}
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: ch ? ch.color : '#8B949E',
+                  }}>
+                  {ch ? ch.icon : '⇄'}
+                </div>
+
+                {/* Label + date */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold">{ch ? ch.label : 'Interaction'}</p>
+                  <p className="text-brand-muted text-xs font-mono">
+                    {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {' · '}
+                    {date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+
+                {/* Amount + status */}
+                <div className="text-right shrink-0">
+                  {ch && (
+                    <p className="text-sm font-bold font-mono" style={{ color: ch.color }}>{ch.amount}</p>
+                  )}
+                  <span className={`text-xs ${status === 'success' ? 'text-brand-green' : 'text-red-400'}`}>
+                    {status === 'success' ? '✓' : '✗'} {status}
+                  </span>
+                </div>
+
+                {/* Explorer link */}
+                <a href={`https://suiscan.xyz/testnet/tx/${tx.digest}`}
+                  target="_blank" rel="noreferrer"
+                  className="text-brand-muted hover:text-brand-cyan text-xs shrink-0 transition-colors">
+                  ↗
+                </a>
+              </motion.div>
+            )
+          })}
+        </div>
+      )}
+    </motion.div>
+  )
 }
 
 export default function DashboardPage() {
@@ -143,12 +268,15 @@ export default function DashboardPage() {
           <p className="text-brand-muted text-xs font-semibold uppercase tracking-widest mb-4">Quick Actions</p>
           <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
             {quickActions.map(({ href, icon, label, desc, color, bg, border }, i) => (
-              <motion.a
-                key={href} href={href}
-                whileHover={{ y: -6, scale: 1.03 }}
+              <motion.div
+                key={href}
+                whileHover={{ y: -4, scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                className="relative rounded-2xl p-3 sm:p-4 text-center cursor-pointer overflow-hidden group"
+                transition={{ type: 'spring', stiffness: 600, damping: 22 }}
+              >
+              <Link
+                to={href}
+                className="relative rounded-2xl p-3 sm:p-4 text-center cursor-pointer overflow-hidden group block"
                 style={{ background: bg, border: `1px solid ${border}` }}
               >
                 {/* Hover glow sweep */}
@@ -165,7 +293,8 @@ export default function DashboardPage() {
                 {/* Bottom neon line */}
                 <div className="absolute bottom-0 left-0 right-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                   style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-              </motion.a>
+              </Link>
+              </motion.div>
             ))}
           </div>
         </motion.div>
@@ -185,89 +314,8 @@ export default function DashboardPage() {
           ))}
         </motion.div>
 
-        {/* ── Assets ────────────────────────────────────────────────────── */}
-        <motion.div variants={item}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-brand-muted text-xs font-semibold uppercase tracking-widest">
-              Assets
-              <motion.span
-                className="ml-2 text-brand-purple"
-                key={objects.length}
-                initial={{ scale: 1.5 }} animate={{ scale: 1 }}
-              >
-                {objects.length}
-              </motion.span>
-            </p>
-            {objects.length > 0 && (
-              <a href="/nfts" className="text-brand-cyan text-xs hover:underline">View all →</a>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="card h-32 animate-pulse"
-                  style={{ background: 'rgba(255,255,255,0.03)' }} />
-              ))}
-            </div>
-          ) : objects.length === 0 ? (
-            <motion.div
-              className="relative rounded-3xl overflow-hidden flex flex-col items-center justify-center py-24"
-              style={{
-                background: 'linear-gradient(135deg, rgba(153,69,255,0.06), rgba(0,240,255,0.03))',
-                border: '1px dashed rgba(153,69,255,0.25)',
-              }}
-            >
-              {/* Animated rings */}
-              <div className="relative mb-6">
-                <motion.div
-                  className="w-24 h-24 rounded-full border border-brand-purple/20"
-                  animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-                  transition={{ duration: 3, repeat: Infinity }}
-                />
-                <motion.div
-                  className="absolute inset-3 rounded-full border border-brand-cyan/30"
-                  animate={{ scale: [1, 1.15, 1], opacity: [0.4, 0.7, 0.4] }}
-                  transition={{ duration: 3, repeat: Infinity, delay: 0.5 }}
-                />
-                <div className="absolute inset-6 rounded-full flex items-center justify-center text-3xl"
-                  style={{ background: 'rgba(153,69,255,0.1)', border: '1px solid rgba(153,69,255,0.2)' }}>
-                  🌌
-                </div>
-              </div>
-              <p className="text-white font-semibold text-lg mb-1">No assets yet</p>
-              <p className="text-brand-muted text-sm mb-6">Receive SUI or NFTs to get started</p>
-              <motion.a href="/receive" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                className="btn-primary px-8 py-3">
-                Get SUI →
-              </motion.a>
-            </motion.div>
-          ) : (
-            <motion.div variants={container} initial="hidden" animate="show"
-              className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {objects.slice(0, 8).map((obj, i) => (
-                <motion.div key={obj.data?.objectId} variants={item}
-                  whileHover={{ y: -4, scale: 1.02 }}
-                  className="card cursor-pointer group"
-                >
-                  <div className="w-full aspect-square rounded-xl mb-3 overflow-hidden flex items-center justify-center"
-                    style={{ background: 'rgba(153,69,255,0.08)', border: '1px solid rgba(153,69,255,0.15)' }}>
-                    {obj.data?.display?.data?.image_url
-                      ? <img src={obj.data.display.data.image_url} className="w-full h-full object-cover" />
-                      : <span className="text-4xl opacity-60">◈</span>
-                    }
-                  </div>
-                  <p className="text-white text-sm font-medium truncate">
-                    {obj.data?.display?.data?.name || 'Object'}
-                  </p>
-                  <p className="text-brand-muted text-xs font-mono truncate mt-0.5">
-                    {obj.data?.objectId?.slice(0, 12)}…
-                  </p>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </motion.div>
+        {/* ── Recent Transactions ───────────────────────────────────────── */}
+        <RecentTxs address={address} />
 
       </motion.div>
     </Layout>
