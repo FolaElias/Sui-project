@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useWallet } from '../context/WalletContext'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import SuiLogo from '../components/shared/SuiLogo'
+import SplashScreen from '../components/shared/SplashScreen'
 
 export default function UnlockPage() {
   const navigate = useNavigate()
@@ -13,6 +15,7 @@ export default function UnlockPage() {
   const [password, setPassword] = useState('')
   const [showPw, setShowPw]     = useState(false)
   const [loading, setLoading]   = useState(false)
+  const [showSplash, setShowSplash] = useState(false)
 
   const handleUnlock = async () => {
     if (!password) return toast.error('Enter your password')
@@ -30,13 +33,15 @@ export default function UnlockPage() {
         }
       }
 
-      navigate('/dashboard')
+      setShowSplash(true)
     } catch {
       toast.error('Wrong password. Try again.')
     } finally {
       setLoading(false)
     }
   }
+
+  if (showSplash) return <SplashScreen onDone={() => navigate('/dashboard')} />
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 relative overflow-hidden">
@@ -55,9 +60,9 @@ export default function UnlockPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="flex items-center justify-center gap-2.5 mb-4">
-            <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-xl font-black text-white"
-              style={{ background: 'linear-gradient(135deg, #9945FF, #00F0FF)', boxShadow: '0 0 25px rgba(153,69,255,0.5)' }}>
-              ◈
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden"
+              style={{ boxShadow: '0 0 25px rgba(109,40,217,0.5)' }}>
+              <SuiLogo size={40} />
             </div>
             <h1 className="text-3xl font-display font-extrabold text-white">
               Sui<span className="gradient-text">Vault</span>

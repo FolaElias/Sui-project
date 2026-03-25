@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useWallet } from '../context/WalletContext'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
+import SuiLogo from '../components/shared/SuiLogo'
 
 const STEPS = ['Account', 'Password', 'Backup', 'Verify', 'Done']
 
@@ -159,8 +160,8 @@ export default function CreateWalletPage() {
           <Link to="/" className="flex items-center gap-2 group">
             <span className="text-brand-muted group-hover:text-white transition-colors text-sm">←</span>
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-black text-white"
-                style={{ background: 'linear-gradient(135deg, #9945FF, #00F0FF)' }}>◈</div>
+              <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center"
+                style={{ boxShadow: '0 0 12px rgba(109,40,217,0.5)' }}><SuiLogo size={28} /></div>
               <span className="font-display font-extrabold text-white">
                 Sui<span className="gradient-text">Vault</span>
               </span>

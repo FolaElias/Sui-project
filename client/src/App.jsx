@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
+import SplashScreen from './components/shared/SplashScreen'
 
 // Pages
 import LandingPage from './pages/LandingPage'
@@ -21,6 +23,12 @@ function ProtectedRoute({ children }) {
 }
 
 export default function App() {
+  const [splash, setSplash] = useState(true)
+
+  const handleSplashDone = () => setSplash(false)
+
+  if (splash) return <SplashScreen onDone={handleSplashDone} />
+
   return (
     <Routes>
       {/* Public */}
