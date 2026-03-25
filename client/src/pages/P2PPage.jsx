@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Transaction } from '@mysten/sui/transactions'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import Layout from '../components/shared/Layout'
 import { useWallet } from '../context/WalletContext'
+
+const MIST = 1_000_000_000
 
 const api = axios.create()
 api.interceptors.request.use(cfg => {
@@ -76,6 +79,7 @@ function TradeTimeline({ status }) {
 
 // ── Trade room ────────────────────────────────────────────────────────────────
 function TradeRoom({ tradeId, currentUserId, onBack }) {
+  const { keypair, suiClient, address, balance, fetchBalance } = useWallet()
   const [trade, setTrade]   = useState(null)
   const [msg, setMsg]       = useState('')
   const [busy, setBusy]     = useState(false)
@@ -167,6 +171,16 @@ function TradeRoom({ tradeId, currentUserId, onBack }) {
           <div className="text-right text-xs text-brand-muted">
             <p>Trade ID</p>
             <p className="text-brand-cyan font-mono">{trade._id?.slice(-8)}</p>
+            {trade.txDigest && (
+              <a
+                href={`https://suiscan.xyz/testnet/tx/${trade.txDigest}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 mt-1 text-brand-green hover:underline font-semibold"
+              >
+                ✓ View on Explorer ↗
+              </a>
+            )}
           </div>
         </div>
 
@@ -197,10 +211,44 @@ function TradeRoom({ tradeId, currentUserId, onBack }) {
             )}
             {isSeller && trade.status === 'confirming' && (
               <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                onClick={() => advance('completed')} disabled={busy}
+                onClick={async () => {
+                  if (!keypair) return toast.error('Wallet not unlocked')
+
+                  const amountMist = BigInt(Math.floor(trade.amount * MIST))
+                  const sellerBal  = BigInt(balance || '0')
+                  if (amountMist > sellerBal) {
+                    return toast.error(`Insufficient balance. You have ${(Number(sellerBal) / MIST).toFixed(4)} SUI`)
+                  }
+
+                  setBusy(true)
+                  try {
+                    // Build & sign on-chain transfer to buyer
+                    const tx = new Transaction()
+                    const [coin] = tx.splitCoins(tx.gas, [tx.pure.u64(amountMist)])
+                    tx.transferObjects([coin], trade.buyerAddress)
+
+                    const result = await suiClient.signAndExecuteTransaction({
+                      signer: keypair,
+                      transaction: tx,
+                    })
+
+                    // Mark trade completed on backend with tx digest
+                    await api.patch(`/api/p2p/trades/${tradeId}/status`, {
+                      status: 'completed',
+                      txDigest: result.digest,
+                    })
+
+                    await fetchBalance()
+                    toast.success(`✓ ${trade.amount} SUI sent to buyer!`)
+                    load()
+                  } catch (err) {
+                    toast.error(err?.message || 'Transaction failed')
+                  } finally { setBusy(false) }
+                }}
+                disabled={busy}
                 className="px-5 py-2.5 text-sm flex-1 rounded-xl font-bold text-white disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#14F195,#00F0FF)', color: '#0A0A0F' }}>
-                ✓ Release SUI
+                {busy ? 'Sending…' : '✓ Release SUI'}
               </motion.button>
             )}
 
@@ -378,17 +426,24 @@ function AdCard({ ad, onTrade, currentUserId }) {
 
 // ── Post Ad Modal ─────────────────────────────────────────────────────────────
 function PostAdModal({ type, onClose, onSuccess }) {
+  const { balance } = useWallet()
   const [form, setForm] = useState({
     price: '', totalAmount: '', minOrder: '', maxOrder: '',
     paymentMethod: 'Sui Transfer', terms: '',
   })
   const [busy, setBusy] = useState(false)
 
+  const suiBalance = Number(balance || '0') / MIST
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const submit = async () => {
     if (!form.price || !form.totalAmount || !form.minOrder || !form.maxOrder)
       return toast.error('Fill all required fields')
+
+    // Sellers cannot advertise more SUI than they hold
+    if (type === 'sell' && Number(form.totalAmount) > suiBalance) {
+      return toast.error(`Insufficient balance — you only have ${suiBalance.toFixed(4)} SUI`)
+    }
     setBusy(true)
     try {
       await api.post('/api/p2p/ads', {
@@ -430,6 +485,17 @@ function PostAdModal({ type, onClose, onSuccess }) {
             </h3>
             <button onClick={onClose} className="text-brand-muted hover:text-white text-xl">✕</button>
           </div>
+
+          {/* Balance chip — sellers see their limit */}
+          {type === 'sell' && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-brand-green/20"
+              style={{ background: 'rgba(20,241,149,0.05)' }}>
+              <span className="text-brand-green text-xs">●</span>
+              <span className="text-brand-muted text-xs">Your balance:</span>
+              <span className="text-brand-green font-bold font-mono text-xs">{suiBalance.toFixed(4)} SUI</span>
+              <span className="text-brand-muted text-xs ml-auto">Max you can sell</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             {[
