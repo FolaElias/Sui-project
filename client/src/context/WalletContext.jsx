@@ -94,10 +94,21 @@ export function WalletProvider({ children }) {
     return { address: addr }
   }, [])
 
-  // Lock wallet (clear from memory and session)
+  // Lock wallet — full logout, wipe all local state and storage
   const lockWallet = useCallback(() => {
+    // Clear localStorage completely
+    localStorage.removeItem('sui_keystore')
+    localStorage.removeItem('sui_keystore_backup')
+    localStorage.removeItem('token')
+    localStorage.removeItem('sui_email')
+    localStorage.removeItem('sui_pin_hash')
+    localStorage.removeItem('sui_send_ban_until')
+
+    // Clear session
     sessionStorage.removeItem('sui_session_pw')
     sessionStorage.removeItem('sui_unlocked')
+
+    // Clear in-memory state
     setKeypair(null)
     setAddress(null)
     setBalance('0')

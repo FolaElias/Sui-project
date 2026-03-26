@@ -112,9 +112,9 @@ export default function UnlockPage() {
 
           <div className="border-t border-brand-border pt-4 space-y-2">
             <p className="text-brand-muted text-xs text-center">Forgot your password?</p>
-            <Link to="/import"
+            <Link to="/forgot-password"
               className="block text-center text-brand-cyan text-sm hover:underline">
-              Restore with secret phrase →
+              Reset with secret phrase →
             </Link>
           </div>
         </div>

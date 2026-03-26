@@ -8,6 +8,7 @@ import LandingPage from './pages/LandingPage'
 import CreateWalletPage from './pages/CreateWalletPage'
 import ImportWalletPage from './pages/ImportWalletPage'
 import UnlockPage from './pages/UnlockPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import SendPage from './pages/SendPage'
 import ReceivePage from './pages/ReceivePage'
@@ -36,6 +37,7 @@ export default function App() {
       <Route path="/create" element={<CreateWalletPage />} />
       <Route path="/import" element={<ImportWalletPage />} />
       <Route path="/unlock" element={<UnlockPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
       {/* Protected — wallet must be unlocked */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

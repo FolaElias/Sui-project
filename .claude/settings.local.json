@@ -9,7 +9,11 @@
       "Bash(npm run:*)",
       "Bash(pkill -f \"node.*nodemon\")",
       "Bash(pkill -f \"node.*vite\")",
-      "Bash(pkill -f \"node.*index.js\")"
+      "Bash(pkill -f \"node.*index.js\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''nodemailer''\\); console.log\\(''ok''\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /PID 19012 /F)"
     ]
   }
 }

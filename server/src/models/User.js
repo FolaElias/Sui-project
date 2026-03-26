@@ -6,7 +6,9 @@ const userSchema = new mongoose.Schema({
   email:    { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   suiAddress:   { type: String, default: null },
-  mnemonicHash: { type: String, default: null, unique: true, sparse: true }, // SHA256 of mnemonic — unique per account
+  mnemonicHash: { type: String, default: null, unique: true, sparse: true },
+  resetOtp:        { type: String,  default: null },
+  resetOtpExpires: { type: Date,    default: null },
   avatar:   { type: String, default: null },
   bio:      { type: String, default: '' },
   keystoreBackup: { type: String, default: null },

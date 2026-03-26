@@ -46,6 +46,28 @@ router.patch('/bind-mnemonic', protect, async (req, res) => {
   }
 })
 
+// POST /api/user/verify-mnemonic — protected: confirm phrase matches logged-in user's account
+router.post('/verify-mnemonic', protect, async (req, res) => {
+  try {
+    const { mnemonicHash } = req.body
+    if (!mnemonicHash) return res.status(400).json({ message: 'mnemonicHash required' })
+
+    // Legacy accounts (created before mnemonic binding) — allow and bind now
+    if (!req.user.mnemonicHash) {
+      await User.findByIdAndUpdate(req.user._id, { mnemonicHash })
+      return res.json({ valid: true })
+    }
+
+    if (req.user.mnemonicHash !== mnemonicHash) {
+      return res.status(400).json({ message: 'This phrase does not match your account.' })
+    }
+
+    res.json({ valid: true })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
 // PATCH /api/user/address — link Sui address to profile
 router.patch('/address', protect, async (req, res) => {
   try {
