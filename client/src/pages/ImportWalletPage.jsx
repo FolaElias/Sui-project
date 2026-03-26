@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWallet } from '../context/WalletContext'
@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'
 import SuiLogo from '../components/shared/SuiLogo'
 import toast from 'react-hot-toast'
 import * as bip39 from 'bip39'
+import CryptoJS from 'crypto-js'
+import axios from 'axios'
 
 const STEPS = ['Phrase', 'Account', 'Password', 'Done']
 
@@ -105,8 +107,8 @@ export default function ImportWalletPage() {
     inputRefs.current[0]?.focus()
   }
 
-  // ── Step 0: Validate phrase ───────────────────────────────────────────────
-  const handlePhraseNext = () => {
+  // ── Step 0: Validate phrase + check server ownership ─────────────────────
+  const handlePhraseNext = async () => {
     const phrase = words.join(' ').trim()
     const filled = words.filter(w => w !== '').length
     if (filled < 12) return toast.error('Enter all 12 words')
@@ -114,8 +116,35 @@ export default function ImportWalletPage() {
       setPhraseValid(false)
       return toast.error('Invalid secret phrase. Check your words and try again.')
     }
-    setPhraseValid(true)
-    setStep(1)
+
+    setLoading(true)
+    try {
+      const mnemonicHash = CryptoJS.SHA256(phrase).toString()
+      const { data } = await axios.post('/api/user/check-mnemonic', { mnemonicHash })
+
+      if (data.claimed) {
+        // Phrase is registered — force login mode with the owning account
+        setPhraseValid(false)
+        setLoading(false)
+        toast.error(`This phrase is already registered to ${data.maskedEmail}. Sign in with that account.`, { duration: 6000 })
+        // Pre-switch to login mode and advance so they can sign in with the right account
+        setAuthMode('login')
+        setPhraseValid(true)
+        setStep(1)
+        return
+      }
+
+      // Not claimed — fresh import
+      setPhraseValid(true)
+      setStep(1)
+    } catch {
+      // If server is unreachable, allow locally but warn
+      toast('Could not verify phrase ownership — proceeding offline.', { icon: '⚠️' })
+      setPhraseValid(true)
+      setStep(1)
+    } finally {
+      setLoading(false)
+    }
   }
 
   // ── Step 1: Account ───────────────────────────────────────────────────────
@@ -150,13 +179,26 @@ export default function ImportWalletPage() {
     // Import wallet
     try {
       const phrase = words.join(' ').trim()
+      const mnemonicHash = CryptoJS.SHA256(phrase).toString()
       const { address } = importWallet(phrase, password)
       setWalletAddress(address)
+
+      const token = localStorage.getItem('token')
+      const headers = { Authorization: `Bearer ${token}` }
+
+      // Bind mnemonic hash to this account — blocks anyone else from using this phrase
+      const bindRes = await axios.patch('/api/user/bind-mnemonic', { mnemonicHash }, { headers })
+        .catch(err => {
+          if (err?.response?.status === 409) {
+            throw new Error(err.response.data.message)
+          }
+        })
+
       await linkAddress(address).catch(() => {})
       setStep(3)
     } catch (err) {
       console.warn('[importWallet]', err?.message)
-      toast.error('Failed to import wallet: ' + (err?.message || 'Unknown error'))
+      toast.error(err?.message || 'Failed to import wallet')
     } finally {
       setLoading(false)
     }
@@ -289,10 +331,11 @@ export default function ImportWalletPage() {
 
               <motion.button
                 whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                className="btn-cyan w-full py-3.5 font-semibold"
+                className="btn-cyan w-full py-3.5 font-semibold disabled:opacity-50"
                 onClick={handlePhraseNext}
+                disabled={loading}
               >
-                Verify Phrase →
+                {loading ? 'Checking phrase…' : 'Verify Phrase →'}
               </motion.button>
 
               <p className="text-center text-brand-muted text-xs">

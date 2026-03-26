@@ -6,7 +6,10 @@
       "Bash(find 'c:\\\\Users\\\\Admin\\\\Documents\\\\React-Projects\\\\Sui Web3\\\\client\\\\node_modules' -name *.svg)",
       "Bash(xargs grep:*)",
       "Bash(node src/seed.js)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(pkill -f \"node.*nodemon\")",
+      "Bash(pkill -f \"node.*vite\")",
+      "Bash(pkill -f \"node.*index.js\")"
     ]
   }
 }

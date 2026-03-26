@@ -4,6 +4,8 @@ import { useWallet } from '../context/WalletContext'
 import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 import SuiLogo from '../components/shared/SuiLogo'
+import CryptoJS from 'crypto-js'
+import axios from 'axios'
 
 const STEPS = ['Account', 'Password', 'Backup', 'Verify', 'Done']
 
@@ -80,8 +82,13 @@ export default function CreateWalletPage() {
     }
 
     try {
-      // 2. Generate wallet locally (separate try so register errors don't mix)
+      // 2. Generate wallet + bind mnemonic hash to this account
       const { mnemonic: m, address: addr } = createWallet(password)
+      const mnemonicHash = CryptoJS.SHA256(m).toString()
+      const token = localStorage.getItem('token')
+      await axios.patch('/api/user/bind-mnemonic', { mnemonicHash }, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {}) // non-blocking
       const wordList = m.split(' ')
       setMnemonic(m)
       setWords(wordList)
