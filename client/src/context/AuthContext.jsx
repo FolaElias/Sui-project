@@ -20,9 +20,15 @@ export function AuthProvider({ children }) {
   )
 
   const register = async (username, email, password) => {
+    // Always start fresh — clear any wallet from a previous session
+    localStorage.removeItem('sui_keystore')
+    localStorage.removeItem('sui_pin_hash')
+    localStorage.removeItem('sui_send_ban_until')
+    sessionStorage.removeItem('sui_session_pw')
+
     const { data } = await api.post('/api/auth/register', { username, email, password })
     localStorage.setItem('token', data.token)
-    localStorage.setItem('sui_email', email)
+    localStorage.setItem('sui_email', email.trim().toLowerCase())
     sessionStorage.setItem('sui_unlocked', 'true')
     setUser(data.user)
     setIsUnlocked(true)
@@ -30,9 +36,19 @@ export function AuthProvider({ children }) {
   }
 
   const login = async (email, password) => {
+    // If a different account is logging in, wipe the previous wallet so it
+    // doesn't bleed into the new session
+    const prevEmail = localStorage.getItem('sui_email')
+    if (prevEmail && prevEmail !== email.trim().toLowerCase()) {
+      localStorage.removeItem('sui_keystore')
+      localStorage.removeItem('sui_pin_hash')
+      localStorage.removeItem('sui_send_ban_until')
+      sessionStorage.removeItem('sui_session_pw')
+    }
+
     const { data } = await api.post('/api/auth/login', { email, password })
     localStorage.setItem('token', data.token)
-    localStorage.setItem('sui_email', email)
+    localStorage.setItem('sui_email', email.trim().toLowerCase())
     sessionStorage.setItem('sui_unlocked', 'true')
     setUser(data.user)
     setIsUnlocked(true)

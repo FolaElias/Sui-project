@@ -70,10 +70,15 @@ export default function ImportWalletPage() {
     try {
       const mnemonicHash = CryptoJS.SHA256(phrase).toString()
 
-      // Verify phrase belongs to this account
+      // Verify phrase belongs to this account (also auto-binds legacy accounts)
       await axios.post('/api/user/verify-mnemonic', { mnemonicHash }, {
         headers: { Authorization: `Bearer ${token}` },
       })
+
+      // Ensure hash is bound (covers accounts where initial binding failed)
+      await axios.patch('/api/user/bind-mnemonic', { mnemonicHash }, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
 
       // Import wallet locally with their password
       const { address } = importWallet(phrase, storedPassword)

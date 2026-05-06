@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Transaction } from '@mysten/sui/transactions'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import Layout from '../components/shared/Layout'
 import { useWallet } from '../context/WalletContext'
@@ -101,6 +102,7 @@ function Row({ label, value, mono, highlight, dim }) {
 }
 
 export default function SendPage() {
+  const navigate = useNavigate()
   const { keypair, address, balance, fetchBalance, suiClient } = useWallet()
   const [recipient, setRecipient] = useState('')
   const [amount, setAmount]       = useState('')
@@ -148,8 +150,8 @@ export default function SendPage() {
     if (!num || num <= 0) {
       setAmtError('Enter a valid amount')
       ok = false
-    } else if (num >= balSui) {
-      setAmtError('Insufficient balance (keep some SUI for gas)')
+    } else if (num > balSui - 0.005) {
+      setAmtError('Insufficient balance (need at least 0.005 SUI for gas)')
       ok = false
     } else setAmtError('')
 
@@ -224,7 +226,7 @@ export default function SendPage() {
                 <p className="text-brand-green font-semibold text-sm">Transaction sent!</p>
                 <p className="text-brand-muted text-xs font-mono mt-1 break-all">{txDigest}</p>
                 <a
-                  href={`https://suiexplorer.com/txblock/${txDigest}?network=testnet`}
+                  href={`https://suiscan.xyz/testnet/tx/${txDigest}`}
                   target="_blank" rel="noreferrer"
                   className="text-brand-cyan text-xs hover:underline mt-1 inline-block"
                 >View on Explorer →</a>
@@ -316,7 +318,7 @@ export default function SendPage() {
             {/* Memo (optional) */}
             <div>
               <label className="text-brand-muted text-xs font-medium mb-2 block">
-                Memo <span className="text-brand-muted/50">(optional)</span>
+                Memo <span className="text-brand-muted/50">(optional · local note, not recorded on-chain)</span>
               </label>
               <input
                 value={memo}
@@ -400,7 +402,16 @@ export default function SendPage() {
             amount={amount}
             onConfirm={() => {
               if (!hasPin()) {
-                toast.error('Set a transaction PIN first in Settings → Security')
+                setShowConfirm(false)
+                toast((t) => (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm">No PIN set. Set one in Settings first.</span>
+                    <button
+                      onClick={() => { toast.dismiss(t.id); navigate('/settings') }}
+                      className="text-brand-purple font-bold text-sm shrink-0"
+                    >Go →</button>
+                  </div>
+                ), { duration: 5000 })
                 return
               }
               setShowConfirm(false)

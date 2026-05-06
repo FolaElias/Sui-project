@@ -86,9 +86,13 @@ export default function CreateWalletPage() {
       const { mnemonic: m, address: addr } = createWallet(password)
       const mnemonicHash = CryptoJS.SHA256(m).toString()
       const token = localStorage.getItem('token')
-      await axios.patch('/api/user/bind-mnemonic', { mnemonicHash }, {
-        headers: { Authorization: `Bearer ${token}` }
-      }).catch(() => {}) // non-blocking
+      try {
+        await axios.patch('/api/user/bind-mnemonic', { mnemonicHash }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      } catch {
+        toast.error('Could not link phrase for recovery — phrase reset may not work. Try again from Settings.')
+      }
       const wordList = m.split(' ')
       setMnemonic(m)
       setWords(wordList)
