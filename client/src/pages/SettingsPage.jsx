@@ -187,6 +187,37 @@ function RevealMnemonicModal({ onClose }) {
   )
 }
 
+function PinInput({ value, onChange, prefix = 'pin' }) {
+  return (
+    <div className="flex gap-3 justify-center my-4">
+      {[0, 1, 2, 3].map(i => (
+        <input
+          key={i}
+          id={`${prefix}-${i}`}
+          type="password"
+          maxLength={1}
+          inputMode="numeric"
+          pattern="[0-9]"
+          value={value[i] || ''}
+          onChange={e => {
+            const v = e.target.value.replace(/\D/, '')
+            const arr = value.split('')
+            arr[i] = v
+            onChange(arr.join(''))
+            if (v && i < 3) document.getElementById(`${prefix}-${i + 1}`)?.focus()
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Backspace' && !value[i] && i > 0)
+              document.getElementById(`${prefix}-${i - 1}`)?.focus()
+          }}
+          className="w-12 h-14 text-center text-xl font-bold rounded-xl text-white outline-none focus:ring-2 focus:ring-purple-500"
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function PinSetup() {
   const pinExists = hasPin()
   const [mode, setMode]       = useState(null) // null | 'set' | 'change'
@@ -197,34 +228,6 @@ function PinSetup() {
   const [error, setError]     = useState('')
 
   const reset = () => { setMode(null); setStep(1); setPin(''); setPinConfirm(''); setOldPin(''); setError('') }
-
-  const PinInput = ({ value, onChange, placeholder }) => (
-    <div className="flex gap-3 justify-center my-4">
-      {[0,1,2,3].map(i => (
-        <input
-          key={i}
-          type="password"
-          maxLength={1}
-          inputMode="numeric"
-          pattern="[0-9]"
-          value={value[i] || ''}
-          onChange={e => {
-            const v = e.target.value.replace(/\D/,'')
-            const arr = value.split('')
-            arr[i] = v
-            onChange(arr.join(''))
-            if (v && i < 3) document.getElementById(`pin-${i+1}`)?.focus()
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Backspace' && !value[i] && i > 0) document.getElementById(`pin-${i-1}`)?.focus()
-          }}
-          id={`pin-${i}`}
-          className="w-12 h-14 text-center text-xl font-bold rounded-xl text-white outline-none focus:ring-2 focus:ring-purple-500"
-          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
-        />
-      ))}
-    </div>
-  )
 
   const handleSave = () => {
     if (pin.length < 4) return setError('Enter a 4-digit PIN')
@@ -270,9 +273,9 @@ function PinSetup() {
       <p className="text-white text-sm font-semibold text-center">
         {step === 3 ? 'Enter current PIN' : step === 1 ? 'Choose a 4-digit PIN' : 'Confirm your PIN'}
       </p>
-      {step === 3 && <PinInput value={oldPin} onChange={setOldPin} />}
-      {step === 1 && <PinInput value={pin} onChange={setPin} />}
-      {step === 2 && <PinInput value={pinConfirm} onChange={setPinConfirm} />}
+      {step === 3 && <PinInput value={oldPin} onChange={setOldPin} prefix="pin-old" />}
+      {step === 1 && <PinInput value={pin} onChange={setPin} prefix="pin-new" />}
+      {step === 2 && <PinInput value={pinConfirm} onChange={setPinConfirm} prefix="pin-confirm" />}
       {error && <p className="text-red-400 text-xs text-center">{error}</p>}
       <div className="flex gap-2 pt-2">
         <button onClick={reset} className="flex-1 py-2.5 rounded-xl text-sm text-brand-muted border border-brand-border hover:text-white transition-colors"

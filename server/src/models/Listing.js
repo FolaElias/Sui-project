@@ -11,9 +11,11 @@ const listingSchema = new mongoose.Schema({
   price: { type: String, required: true },          // in MIST (smallest SUI unit)
   status: {
     type: String,
-    enum: ['active', 'sold', 'cancelled'],
+    enum: ['active', 'pending', 'sold', 'cancelled'],
     default: 'active'
   },
+  buyer:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  buyerAddress: { type: String, default: null },
 }, { timestamps: true })
 
 module.exports = mongoose.model('Listing', listingSchema)

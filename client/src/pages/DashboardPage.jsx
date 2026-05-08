@@ -170,12 +170,30 @@ function RecentTxs({ address }) {
 }
 
 export default function DashboardPage() {
-  const { address, balance, fetchBalance, fetchObjects, objects, loading } = useWallet()
-  const [suiPrice, setSuiPrice] = useState(null)
+  const { address, balance, fetchBalance, fetchObjects, objects } = useWallet()
+  const [suiPrice, setSuiPrice]             = useState(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
+  const [balanceHidden, setBalanceHidden]   = useState(
+    () => localStorage.getItem('sui_balance_hidden') === 'true'
+  )
+
+  const toggleHide = () => {
+    setBalanceHidden(h => {
+      localStorage.setItem('sui_balance_hidden', String(!h))
+      return !h
+    })
+  }
+
+  const refreshBalance = useCallback(async () => {
+    if (!address || balanceLoading) return
+    setBalanceLoading(true)
+    try { await fetchBalance() } catch {}
+    finally { setBalanceLoading(false) }
+  }, [address, balanceLoading, fetchBalance])
 
   useEffect(() => {
     if (!address) return
-    fetchBalance().catch(() => {})
+    refreshBalance()
     fetchObjects().catch(() => {})
   }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -230,23 +248,45 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              <p className="text-brand-muted text-sm font-medium mb-1 uppercase tracking-widest">Total Balance</p>
+              <div className="flex items-center gap-3 mb-1">
+                <p className="text-brand-muted text-sm font-medium uppercase tracking-widest">Total Balance</p>
+                <motion.button
+                  onClick={refreshBalance}
+                  disabled={balanceLoading}
+                  whileTap={{ scale: 0.9 }}
+                  animate={balanceLoading ? { rotate: 360 } : { rotate: 0 }}
+                  transition={balanceLoading ? { duration: 1, repeat: Infinity, ease: 'linear' } : {}}
+                  className="text-brand-muted hover:text-white transition-colors text-sm disabled:opacity-40"
+                  title="Refresh balance"
+                >⟳</motion.button>
+                <motion.button
+                  onClick={toggleHide}
+                  whileTap={{ scale: 0.9 }}
+                  className="text-brand-muted hover:text-white transition-colors text-sm"
+                  title={balanceHidden ? 'Show balance' : 'Hide balance'}
+                >
+                  {balanceHidden ? '👁‍🗨' : '👁'}
+                </motion.button>
+              </div>
 
               <div className="flex items-end gap-3">
                 <motion.h1
-                  className="font-display font-extrabold text-white leading-none"
+                  className={`font-display font-extrabold leading-none transition-opacity duration-300 ${balanceLoading ? 'opacity-40' : 'text-white'}`}
                   style={{ fontSize: 'clamp(2.5rem, 5vw, 4.5rem)' }}
                   initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: balanceLoading ? 0.4 : 1, scale: 1 }}
                   transition={{ delay: 0.2, duration: 0.5, ease: 'backOut' }}
                 >
-                  <AnimatedBalance value={suiBalance} />
+                  {balanceHidden ? '••••••' : <AnimatedBalance value={suiBalance} />}
                 </motion.h1>
                 <span className="text-3xl font-bold gradient-text mb-1">SUI</span>
+                {balanceLoading && !balanceHidden && (
+                  <span className="mb-2 text-xs text-brand-muted animate-pulse">updating…</span>
+                )}
               </div>
 
               <p className="text-brand-muted text-sm mt-2">
-                {usdValue != null ? `≈ $${usdValue} USD` : '≈ — USD'}
+                {balanceHidden ? '≈ $••••• USD' : usdValue != null ? `≈ $${usdValue} USD` : '≈ — USD'}
               </p>
             </div>
 

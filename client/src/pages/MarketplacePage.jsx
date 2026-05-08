@@ -343,6 +343,8 @@ export default function MarketplacePage() {
   const [loadingList, setLoadingList] = useState(true)
   const [showListModal, setShowListModal] = useState(false)
   const [buyModal, setBuyModal]     = useState(null)
+  const [buyLoading, setBuyLoading] = useState(false)
+  const [buyDone, setBuyDone]       = useState(false)
 
   // ── Load on-chain NFTs ─────────────────────────────────────────────────────
   const loadNfts = useCallback(async (reset = true) => {
@@ -392,6 +394,23 @@ export default function MarketplacePage() {
       fetchListings()
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to list NFT')
+    }
+  }
+
+  const handleBuy = async (listing) => {
+    if (!token) return toast.error('Sign in to buy NFTs')
+    setBuyLoading(true)
+    try {
+      await axios.patch(`/api/listings/${listing._id}/buy`,
+        { buyerAddress: address },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setBuyDone(true)
+      fetchListings()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Purchase failed')
+    } finally {
+      setBuyLoading(false)
     }
   }
 
@@ -648,7 +667,7 @@ export default function MarketplacePage() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div className="absolute inset-0"
               style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}
-              onClick={() => setBuyModal(null)} />
+              onClick={() => { if (!buyLoading) { setBuyModal(null); setBuyDone(false) } }} />
             <motion.div className="relative w-full max-w-sm rounded-3xl overflow-hidden z-10"
               initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.85, opacity: 0 }}
@@ -660,46 +679,75 @@ export default function MarketplacePage() {
               }}>
               <div className="h-px w-full"
                 style={{ background: 'linear-gradient(90deg,transparent,#14F195,#00F0FF,transparent)' }} />
+
               <div className="p-6 space-y-5">
-                <div className="flex gap-4 items-center">
-                  <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center bg-brand-purple/10">
-                    {buyModal.imageUrl ? <img src={buyModal.imageUrl} className="w-full h-full object-cover" /> : <span className="text-3xl opacity-40">◈</span>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold truncate">{buyModal.name}</p>
-                    <p className="text-brand-muted text-xs font-mono truncate mt-0.5">{buyModal.objectId?.slice(0,16)}…</p>
-                    {buyModal.seller?.username && <p className="text-brand-cyan text-xs mt-1">@{buyModal.seller.username}</p>}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-brand-border p-4 space-y-2"
-                  style={{ background: 'rgba(255,255,255,0.02)' }}>
-                  {[['NFT Price', `${mistToSui(buyModal.price)} SUI`, 'text-white'], ['Network Fee', '~0.001 SUI', 'text-brand-green']].map(([k,v,c]) => (
-                    <div key={k} className="flex justify-between text-sm">
-                      <span className="text-brand-muted">{k}</span>
-                      <span className={`font-mono ${c}`}>{v}</span>
+                {buyDone ? (
+                  // ── Success state ──
+                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                    className="text-center py-4 space-y-4">
+                    <div className="text-5xl">✅</div>
+                    <div>
+                      <p className="text-white font-bold text-lg">Purchase Requested!</p>
+                      <p className="text-brand-muted text-sm mt-2 leading-relaxed">
+                        Your request has been sent to the seller. They'll transfer the NFT to your wallet once they confirm.
+                      </p>
                     </div>
-                  ))}
-                  <div className="h-px bg-brand-border" />
-                  <div className="flex justify-between text-sm font-bold">
-                    <span className="text-white">Total</span>
-                    <span className="gradient-text font-mono text-base">{(Number(mistToSui(buyModal.price)) + 0.001).toFixed(4)} SUI</span>
-                  </div>
-                </div>
+                    <div className="p-3 rounded-xl border border-brand-cyan/20 bg-brand-cyan/5 text-xs text-brand-cyan text-left">
+                      Your address: <span className="font-mono">{address?.slice(0,14)}…</span>
+                    </div>
+                    <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                      className="btn-primary w-full py-3 text-sm"
+                      onClick={() => { setBuyModal(null); setBuyDone(false) }}>
+                      Done
+                    </motion.button>
+                  </motion.div>
+                ) : (
+                  // ── Confirm state ──
+                  <>
+                    <div className="flex gap-4 items-center">
+                      <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center bg-brand-purple/10">
+                        {buyModal.imageUrl ? <img src={buyModal.imageUrl} className="w-full h-full object-cover" /> : <span className="text-3xl opacity-40">◈</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-semibold truncate">{buyModal.name}</p>
+                        <p className="text-brand-muted text-xs font-mono truncate mt-0.5">{buyModal.objectId?.slice(0,16)}…</p>
+                        {buyModal.seller?.username && <p className="text-brand-cyan text-xs mt-1">@{buyModal.seller.username}</p>}
+                      </div>
+                    </div>
 
-                <div className="p-3 rounded-xl border border-brand-yellow/20 bg-brand-yellow/5 text-xs text-brand-yellow">
-                  ⚠ On-chain escrow deploys with the Move contract phase. Purchase intent recorded now.
-                </div>
+                    <div className="rounded-2xl border border-brand-border p-4 space-y-2"
+                      style={{ background: 'rgba(255,255,255,0.02)' }}>
+                      {[['Price', `${mistToSui(buyModal.price)} SUI`, 'text-white'], ['Est. network fee', '~0.001 SUI', 'text-brand-muted']].map(([k,v,c]) => (
+                        <div key={k} className="flex justify-between text-sm">
+                          <span className="text-brand-muted">{k}</span>
+                          <span className={`font-mono ${c}`}>{v}</span>
+                        </div>
+                      ))}
+                      <div className="h-px bg-brand-border" />
+                      <div className="flex justify-between text-sm font-bold">
+                        <span className="text-white">Total</span>
+                        <span className="gradient-text font-mono text-base">{(Number(mistToSui(buyModal.price)) + 0.001).toFixed(4)} SUI</span>
+                      </div>
+                    </div>
 
-                <div className="flex gap-3">
-                  <button className="btn-ghost flex-1 py-3 text-sm" onClick={() => setBuyModal(null)}>Cancel</button>
-                  <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    className="flex-1 py-3 rounded-xl text-sm font-bold text-brand-bg"
-                    style={{ background: 'linear-gradient(135deg,#14F195,#00C27A)', boxShadow: '0 0 16px rgba(20,241,149,0.3)' }}
-                    onClick={() => { toast.success('Purchase recorded! 🎉'); setBuyModal(null) }}>
-                    Confirm Buy ✓
-                  </motion.button>
-                </div>
+                    <div className="p-3 rounded-xl border border-brand-purple/20 bg-brand-purple/5 text-xs text-brand-muted leading-relaxed">
+                      ℹ Clicking confirm notifies the seller. They'll send the NFT to your wallet address. On-chain escrow coming in v2.
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button className="btn-ghost flex-1 py-3 text-sm" onClick={() => setBuyModal(null)} disabled={buyLoading}>Cancel</button>
+                      <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                        className="flex-1 py-3 rounded-xl text-sm font-bold text-brand-bg disabled:opacity-50 flex items-center justify-center gap-2"
+                        style={{ background: 'linear-gradient(135deg,#14F195,#00C27A)', boxShadow: '0 0 16px rgba(20,241,149,0.3)' }}
+                        onClick={() => handleBuy(buyModal)}
+                        disabled={buyLoading}>
+                        {buyLoading
+                          ? <><motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="inline-block">⟳</motion.span> Processing…</>
+                          : 'Confirm Buy ✓'}
+                      </motion.button>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </motion.div>

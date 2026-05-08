@@ -131,7 +131,7 @@ function TxRow({ tx, address }) {
                 <span className="text-brand-muted shrink-0">Tx ID</span>
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-brand-cyan font-mono truncate">{digest?.slice(0, 14)}…</span>
-                  <a href={`https://suiexplorer.com/txblock/${digest}?network=testnet`}
+                  <a href={`https://suiscan.xyz/testnet/tx/${digest}`}
                     target="_blank" rel="noreferrer"
                     className="text-brand-purple hover:underline shrink-0">
                     ↗
@@ -190,33 +190,36 @@ const FILTER_OPTIONS = ['All', 'Received', 'Sent', 'Contract']
 
 export default function HistoryPage() {
   const { address } = useWallet()
-  const [txs, setTxs]         = useState([])
-  const [loading, setLoading] = useState(false)
-  const [cursor, setCursor]   = useState(null)
-  const [hasMore, setHasMore] = useState(true)
-  const [filter, setFilter]   = useState('All')
+  const [txs, setTxs]               = useState([])
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState(null)
+  // Track received/sent cursors separately — they paginate independently
+  const [receivedCursor, setReceivedCursor] = useState(null)
+  const [sentCursor, setSentCursor]         = useState(null)
+  const [hasMore, setHasMore]       = useState(true)
+  const [filter, setFilter]         = useState('All')
 
-  const load = async (reset = false, cursorOverride = undefined) => {
+  const load = async (reset = false) => {
     if (!address) return
     setLoading(true)
+    setError(null)
     try {
-      const cur = reset ? null : (cursorOverride !== undefined ? cursorOverride : cursor)
-      const res = await testnetClient.queryTransactionBlocks({
-        filter:  { ToAddress: address },
-        options: { showEffects: true, showBalanceChanges: true, showInput: true },
-        limit:   20,
-        order:   'descending',
-        ...(cur ? { cursor: cur } : {}),
-      })
-
-      // Also fetch sent transactions
-      const sent = await testnetClient.queryTransactionBlocks({
-        filter:  { FromAddress: address },
-        options: { showEffects: true, showBalanceChanges: true, showInput: true },
-        limit:   20,
-        order:   'descending',
-        ...(cur ? { cursor: cur } : {}),
-      })
+      const [res, sent] = await Promise.all([
+        testnetClient.queryTransactionBlocks({
+          filter:  { ToAddress: address },
+          options: { showEffects: true, showBalanceChanges: true, showInput: true },
+          limit:   20,
+          order:   'descending',
+          ...(!reset && receivedCursor ? { cursor: receivedCursor } : {}),
+        }),
+        testnetClient.queryTransactionBlocks({
+          filter:  { FromAddress: address },
+          options: { showEffects: true, showBalanceChanges: true, showInput: true },
+          limit:   20,
+          order:   'descending',
+          ...(!reset && sentCursor ? { cursor: sentCursor } : {}),
+        }),
+      ])
 
       // Merge, deduplicate by digest, sort newest first
       const merged = [...res.data, ...sent.data]
@@ -233,10 +236,11 @@ export default function HistoryPage() {
         return [...prev, ...unique.filter(t => !existing.has(t.digest))]
       })
       setHasMore(res.hasNextPage || sent.hasNextPage)
-      setCursor(res.nextCursor || sent.nextCursor)
+      if (res.nextCursor)  setReceivedCursor(res.nextCursor)
+      if (sent.nextCursor) setSentCursor(sent.nextCursor)
     } catch (err) {
-      // Silently handle RPC errors — testnet may be temporarily unavailable
       console.warn('[history]', err?.message)
+      setError('Could not load transactions. The network may be unavailable — try refreshing.')
     } finally {
       setLoading(false)
     }
@@ -245,9 +249,10 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!address) return
     setTxs([])
-    setCursor(null)
-    const run = async () => { await load(true) }
-    run()
+    setReceivedCursor(null)
+    setSentCursor(null)
+    setError(null)
+    load(true)
   }, [address]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = txs.filter(tx => {
@@ -285,7 +290,7 @@ export default function HistoryPage() {
 
           <motion.button
             whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => { setTxs([]); setCursor(null); load(true, null) }}
+            onClick={() => { setTxs([]); setReceivedCursor(null); setSentCursor(null); load(true) }}
             disabled={loading}
             className="px-4 py-2 rounded-xl text-sm text-brand-muted border border-brand-border hover:text-white transition-colors flex items-center gap-2 disabled:opacity-40"
             style={{ background: 'rgba(255,255,255,0.03)' }}
@@ -324,6 +329,23 @@ export default function HistoryPage() {
         <div className="space-y-3">
           {loading && txs.length === 0 ? (
             Array(6).fill(0).map((_, i) => <SkeletonRow key={i} />)
+          ) : error ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center justify-center py-20 text-center"
+            >
+              <div className="text-4xl mb-4">⚠️</div>
+              <h3 className="text-white font-bold text-lg mb-2">Failed to load transactions</h3>
+              <p className="text-brand-muted text-sm max-w-xs mb-5">{error}</p>
+              <motion.button
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                onClick={() => { setTxs([]); setReceivedCursor(null); setSentCursor(null); load(true) }}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white border border-brand-purple/30"
+                style={{ background: 'rgba(153,69,255,0.1)' }}
+              >
+                Try again
+              </motion.button>
+            </motion.div>
           ) : filtered.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
@@ -368,7 +390,7 @@ export default function HistoryPage() {
           <div className="mt-6 text-center">
             <motion.button
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              onClick={() => load(false, cursor)}
+              onClick={() => load(false)}
               className="px-6 py-2.5 rounded-xl text-sm text-brand-muted border border-brand-border hover:text-white transition-colors"
               style={{ background: 'rgba(255,255,255,0.03)' }}
             >

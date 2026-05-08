@@ -24,6 +24,26 @@ router.post('/', protect, async (req, res) => {
   }
 })
 
+// PATCH /api/listings/:id/buy — record purchase intent, mark listing as pending
+router.patch('/:id/buy', protect, async (req, res) => {
+  try {
+    const listing = await Listing.findById(req.params.id).populate('seller', 'username')
+    if (!listing) return res.status(404).json({ message: 'Listing not found' })
+    if (listing.status !== 'active') return res.status(400).json({ message: 'This listing is no longer available' })
+    if (listing.seller._id.toString() === req.user._id.toString())
+      return res.status(400).json({ message: "You can't buy your own listing" })
+
+    listing.status       = 'pending'
+    listing.buyer        = req.user._id
+    listing.buyerAddress = req.body.buyerAddress || req.user.suiAddress || null
+    await listing.save()
+
+    res.json(listing)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
 // DELETE /api/listings/:id — cancel listing
 router.delete('/:id', protect, async (req, res) => {
   try {

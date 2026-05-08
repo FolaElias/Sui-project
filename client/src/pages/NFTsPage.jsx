@@ -47,9 +47,10 @@ function SkeletonCard() {
   )
 }
 
-function NFTDetailModal({ nft, onClose, onSend, address }) {
+function NFTDetailModal({ nft, onClose, onSend, address, sending }) {
   const [sendTo, setSendTo] = useState('')
   const [showSend, setShowSend] = useState(false)
+  const addrValid = /^0x[0-9a-fA-F]{64}$/.test(sendTo)
 
   return (
     <motion.div
@@ -123,18 +124,29 @@ function NFTDetailModal({ nft, onClose, onSend, address }) {
                   value={sendTo}
                   onChange={e => setSendTo(e.target.value)}
                   placeholder="Recipient address (0x…)"
-                  className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-brand-border text-white placeholder-brand-muted text-xs font-mono outline-none focus:border-brand-purple/50 mb-2"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-brand-border text-white placeholder-brand-muted text-xs font-mono outline-none focus:border-brand-purple/50 mb-1"
                 />
-                <div className="flex gap-2">
-                  <button onClick={() => setShowSend(false)}
-                    className="flex-1 py-2.5 rounded-xl text-xs text-brand-muted border border-brand-border hover:text-white transition-colors"
+                {sendTo && !addrValid && (
+                  <p className="text-red-400 text-xs mb-2">Invalid Sui address</p>
+                )}
+                {addrValid && (
+                  <p className="text-brand-green text-xs mb-2">✓ Valid address</p>
+                )}
+                <div className="flex gap-2 mt-1">
+                  <button onClick={() => { setShowSend(false); setSendTo('') }}
+                    disabled={sending}
+                    className="flex-1 py-2.5 rounded-xl text-xs text-brand-muted border border-brand-border hover:text-white transition-colors disabled:opacity-40"
                     style={{ background: 'rgba(255,255,255,0.03)' }}>
                     Cancel
                   </button>
-                  <button onClick={() => onSend(nft, sendTo)}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white"
+                  <button
+                    onClick={() => onSend(nft, sendTo)}
+                    disabled={!addrValid || sending}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white disabled:opacity-40 flex items-center justify-center gap-1"
                     style={{ background: 'linear-gradient(135deg,#00F0FF,#9945FF)' }}>
-                    Send NFT
+                    {sending ? (
+                      <><motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="inline-block">⟳</motion.span> Sending…</>
+                    ) : 'Send NFT'}
                   </button>
                 </div>
               </motion.div>
@@ -167,9 +179,10 @@ function NFTDetailModal({ nft, onClose, onSend, address }) {
 }
 
 export default function NFTsPage() {
-  const { keypair, address, suiClient } = useWallet()
+  const { keypair, address } = useWallet()
   const [nfts, setNfts]           = useState([])
   const [loading, setLoading]     = useState(false)
+  const [sending, setSending]     = useState(false)
   const [selected, setSelected]   = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -205,10 +218,15 @@ export default function NFTsPage() {
   }, [address, refreshKey])
 
   const handleSendNFT = async (nft, recipient) => {
+    if (!keypair) {
+      toast.error('Wallet is locked — please unlock first')
+      return
+    }
     if (!/^0x[0-9a-fA-F]{64}$/.test(recipient)) {
       toast.error('Invalid recipient address')
       return
     }
+    setSending(true)
     try {
       const tx = new Transaction()
       tx.transferObjects([tx.object(nft.objectId)], recipient)
@@ -222,6 +240,8 @@ export default function NFTsPage() {
       setTimeout(() => setRefreshKey(k => k + 1), 1500)
     } catch (err) {
       toast.error(err?.message || 'Transfer failed')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -368,8 +388,9 @@ export default function NFTsPage() {
           <NFTDetailModal
             nft={selected}
             address={address}
-            onClose={() => setSelected(null)}
+            onClose={() => !sending && setSelected(null)}
             onSend={handleSendNFT}
+            sending={sending}
           />
         )}
       </AnimatePresence>

@@ -148,6 +148,7 @@ export default function Layout({ children }) {
   }
 
   const suiBalance = (Number(balance) / 1_000_000_000).toFixed(3)
+  const balanceHidden = localStorage.getItem('sui_balance_hidden') === 'true'
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -203,7 +204,7 @@ export default function Layout({ children }) {
               }} />
             <p className="text-brand-muted text-xs mb-1 font-medium">BALANCE</p>
             <p className="text-white font-bold font-mono text-base leading-tight">
-              {suiBalance} <span className="text-brand-cyan">SUI</span>
+              {balanceHidden ? '••••' : suiBalance} <span className="text-brand-cyan">SUI</span>
             </p>
             <p className="text-brand-muted text-xs font-mono mt-1.5 truncate">
               {address?.slice(0, 8)}…{address?.slice(-4)}
@@ -294,7 +295,7 @@ export default function Layout({ children }) {
             {address && (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-brand-purple/20"
                 style={{ background: 'rgba(153,69,255,0.08)' }}>
-                <span className="text-white font-bold font-mono text-xs">{suiBalance}</span>
+                <span className="text-white font-bold font-mono text-xs">{balanceHidden ? '••••' : suiBalance}</span>
                 <span className="text-brand-cyan text-xs">SUI</span>
               </div>
             )}
